@@ -121,7 +121,8 @@ def _run(fixture: dict):
 
 @pytest.mark.parametrize(
     "label_id",
-    ["RL-13-01", "RL-13-02", "RL-13-03", "RL-13-04", "RL-14-01"])
+    ["RL-13-01", "RL-13-02", "RL-13-03", "RL-13-04", "RL-14-01",
+     "RL-15-01"])
 def test_real_label_pipeline_matches_reviewed_expectations(label_id):
     fixture = _fixture(label_id)
     run, _, _ = _run(fixture)
@@ -350,29 +351,30 @@ def test_label_input_boundary():
 def test_stage13_metrics_are_exact():
     runs = []
     for label_id in ("RL-13-01", "RL-13-02", "RL-13-03", "RL-13-04",
-                     "RL-14-01"):
+                     "RL-14-01", "RL-15-01"):
         run, _, _ = _run(_fixture(label_id))
         runs.append(run)
     metrics = summarize(runs)
-    assert metrics["labels_processed"] == 5
-    assert metrics["ingredients_observed"] == 57
-    assert metrics["ingredients_normalized"] == 57
-    assert metrics["exact_matches"] == 5
+    assert metrics["labels_processed"] == 6
+    assert metrics["ingredients_observed"] == 62
+    assert metrics["ingredients_normalized"] == 62
+    assert metrics["exact_matches"] == 7
     assert metrics["alias_matches"] == 0
     assert metrics["candidate_matches"] == 2
     assert metrics["ambiguous"] == 0
-    assert metrics["unresolved"] == 50
-    assert metrics["verified"] == 0
+    assert metrics["unresolved"] == 53
+    assert metrics["verified"] == 2
     assert metrics["provisional"] == 4
     assert metrics["unverified"] == 1
     assert metrics["conflicted"] == 0
-    assert metrics["unknown"] == 52
+    assert metrics["unknown"] == 55
     assert metrics["entity_match_false_positives"] == 0
-    assert metrics["unknown_count"] == 52
+    assert metrics["unknown_count"] == 55
     assert metrics["mismatches"] == 0
-    # 4 of 7 resolved ingredients reached a terminal decision; the
-    # identifier-resolved Frooti ingredient is honestly unverified.
-    assert metrics["verification_coverage"] == round(4 / 7, 4)
+    # 6 of 9 resolved ingredients reached a terminal decision: the
+    # Frooti identifier case stays honestly unverified, the two
+    # Simple Linctus name+code ingredients verify.
+    assert metrics["verification_coverage"] == round(6 / 9, 4)
 
 
 # -- idempotency -----------------------------------------------------------------
@@ -416,7 +418,7 @@ def test_regression_datasets_still_hold_no_verified_truth():
 
 def test_fixtures_are_marked_draft_not_verified():
     for label_id in ("RL-13-01", "RL-13-02", "RL-13-03", "RL-13-04",
-                     "RL-14-01"):
+                     "RL-14-01", "RL-15-01"):
         fixture = _fixture(label_id)
         assert fixture["review_status"] == "draft"
         assert fixture["source_reference"]["retrieved_at"]

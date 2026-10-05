@@ -1,0 +1,103 @@
+{
+  "label_id": "RL-15-01",
+  "domain": "otc_drug",
+  "product_name": "Simple Linctus Sugar Free (oral solution)",
+  "brand": "Thornton & Ross Ltd (MA holder L.C.M. Ltd)",
+  "raw_text": "Aniseed Flavour (contains propylene glycol) PHL-090803, Glycerol (E422), Liquid Maltitol (E965) (contains Sorbitol), Sodium Benzoate (E211), Purified water",
+  "input_method": "manual",
+  "source_reference": {
+    "source_id": "EMC_SPC",
+    "source_class": "A",
+    "description": "UK Summary of Product Characteristics, emc product 4928, print-friendly SmPC; section 6.1 List of excipients transcribed verbatim in printed order",
+    "url": "https://www.medicines.org.uk/emc/product/4928/smpc/print",
+    "retrieved_at": "2026-10-05",
+    "marketing_authorisation": "PL 12965/0050, first authorised 02/07/2010",
+    "text_revision": "06/11/2020, published on emc 16-Nov-2020"
+  },
+  "ground_truth_status": "regulated label text (primary for product presence); the SmPC is the authoritative channel for UK label wording, with MA number and revision date",
+  "review_status": "draft",
+  "scope_note": "Section 6.1 excipient enumeration only (5 nodes). The section 2 active line (Citric acid monohydrate (E330) 125mg per 5ml) is out of scope: the hydrate-qualified name matches no registry record, and only approved registrations can extend the registry.",
+  "expected_ingredients": [
+    {
+      "sequence": 0,
+      "raw": "Aniseed Flavour (contains propylene glycol) PHL-090803",
+      "normalized": "aniseed flavour (contains propylene glycol) phl-090803",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN",
+      "note": "flavour system with internal code; no registry name or identifier; stays unknown"
+    },
+    {
+      "sequence": 1,
+      "raw": "Glycerol (E422)",
+      "normalized": "glycerol E 422",
+      "match_status": "exact_match",
+      "identity_confidence": "HIGH",
+      "entity_ref": "CANON-763389d03732",
+      "verification_status": "verified",
+      "verification_confidence": "HIGH",
+      "note": "name agrees with the registry preferred name and E422 belongs to the same record: dual agreement, all seven gates PASS"
+    },
+    {
+      "sequence": 2,
+      "raw": "Liquid Maltitol (E965) (contains Sorbitol)",
+      "normalized": "liquid maltitol E 965",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN",
+      "note": "E965 is not a registered identifier; stays unknown"
+    },
+    {
+      "sequence": 3,
+      "raw": "Sodium Benzoate (E211)",
+      "normalized": "sodium benzoate E 211",
+      "match_status": "exact_match",
+      "identity_confidence": "HIGH",
+      "entity_ref": "CANON-6223de871d0c",
+      "verification_status": "verified",
+      "verification_confidence": "HIGH",
+      "note": "name agrees with the registry preferred name and E211 belongs to the same record: dual agreement, all seven gates PASS; salt representation preserved"
+    },
+    {
+      "sequence": 4,
+      "raw": "Purified water",
+      "normalized": "purified water",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    }
+  ],
+  "expected_counts": {
+    "ingredients": 5,
+    "exact_matches": 2,
+    "alias_matches": 0,
+    "candidate_matches": 0,
+    "unresolved": 3,
+    "verified": 2,
+    "provisional": 0,
+    "unverified": 0,
+    "conflicted": 0,
+    "unknown": 3
+  },
+  "expected_unknowns": [
+    "aniseed flavour (contains propylene glycol) phl-090803",
+    "liquid maltitol E 965",
+    "purified water"
+  ],
+  "expected_ambiguities": [],
+  "correction": null,
+  "independent_review": {
+    "reviewer": "stage-15 implementation review",
+    "reviewed_at": "2026-10-05",
+    "method": "section 6.1 transcribed from the fetched SmPC print page; ordering, scope exclusion of the section 2 active line, and MA/revision metadata verified against the same page",
+    "status": "confirmed_official_source",
+    "note": "No manufacturer claim beyond what the SmPC prints. No chemistry inferred: verification outcomes are the frozen gate judging label text plus registry plus PubChem evidence.",
+    "chemistry_inferred": false
+  }
+}

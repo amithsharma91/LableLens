@@ -55,7 +55,7 @@ SNAPSHOT = (
     / "snapshots" / "canonical_v1.json"
 )
 LABEL_IDS = ("RL-13-01", "RL-13-02", "RL-13-03", "RL-13-04",
-             "RL-14-01")
+             "RL-14-01", "RL-15-01")
 
 MIGRATED_TABLES = (
     "review_events",
@@ -224,12 +224,12 @@ def test_live_regression_matches_reviewed_expectations(live):
     for run in runs:
         assert run["mismatches"] == [], run["label_id"]
     metrics = summarize(runs)
-    assert metrics["ingredients_observed"] == 57
-    assert metrics["exact_matches"] == 5
+    assert metrics["ingredients_observed"] == 62
+    assert metrics["exact_matches"] == 7
     assert metrics["provisional"] == 4
     assert metrics["unverified"] == 1
-    assert metrics["verified"] == 0
-    assert metrics["unknown"] == 52
+    assert metrics["verified"] == 2
+    assert metrics["unknown"] == 55
     assert metrics["entity_match_false_positives"] == 0
     assert metrics["mismatches"] == 0
 
@@ -338,6 +338,59 @@ def test_live_identifier_resolution_without_verification(live):
     assert len(rows) == 1
     assert rows[0]["status"] == "unverified"
     assert rows[0]["rules_version"] == "1.0.0"
+
+
+@needs_db
+def test_live_verified_path_persists_decision_claim_evidence(live):
+    run = _await(live(_fixture("RL-15-01")))
+    assert run["mismatches"] == []
+    for normalized, entity_id in (
+        ("glycerol E 422",
+         "763389d0-3732-47dd-ad27-2c62a50e95b8"),
+        ("sodium benzoate E 211",
+         "6223de87-1d0c-49f9-a926-e2b57e0fc8ae"),
+    ):
+        result = next(
+            item for item in run["ingredient_results"]
+            if item["normalized_text"] == normalized)
+        assert result["verification_status"] == "verified"
+        decisions = _fetch_all(
+            "SELECT id, status, identity_confidence, rules_version, "
+            "snapshot_version FROM verification_decisions "
+            "WHERE id = '%s'" % result["decision_id"])
+        assert len(decisions) == 1
+        assert decisions[0]["status"] == "verified"
+        assert decisions[0]["identity_confidence"] == "HIGH"
+        assert decisions[0]["rules_version"] == "1.0.0"
+        claims = _fetch_all(
+            "SELECT id, chemical_entity_id, field_name, "
+            "verification_status, confidence FROM claims "
+            "WHERE chemical_entity_id = '%s'" % entity_id)
+        assert claims
+        assert {row["verification_status"] for row in claims} == {
+            "verified"}
+        assert {str(row["chemical_entity_id"]) for row in claims} == {
+            entity_id}
+        identity = next(
+            row for row in claims if row["field_name"] == "identity")
+        assert identity["confidence"] == "HIGH"
+        links = _fetch_all(
+            "SELECT claim_id, source_id FROM claim_sources "
+            "WHERE claim_id = '%s'" % identity["id"])
+        assert len(links) == 1
+        assert links[0]["source_id"]
+        sources = _fetch_all(
+            "SELECT id, name FROM sources WHERE id = '%s'"
+            % links[0]["source_id"])
+        assert len(sources) == 1
+        assert sources[0]["name"]
+    # The three unrelated nodes stayed unknown with no entity.
+    unknowns = _fetch_all(
+        "SELECT chemical_entity_id, verification_status FROM claims "
+        "WHERE chemical_entity_id IS NULL")
+    assert unknowns
+    assert {row["verification_status"] for row in unknowns} == {
+        "unknown"}
 
 
 @needs_db
