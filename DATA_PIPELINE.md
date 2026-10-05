@@ -109,6 +109,15 @@ stable ids. Empty or ingredient-free text analyzes to a warning
 outcome, never a crash or an entity. Quality-gate surfacing is
 the `warnings` array on observe/analyze responses.
 
+### Stage-17 implementation note (2026-10-05)
+OCR runs and corrections carry `owner_subject` (migration 005);
+observations derived from a run inherit the run's owner, and every
+OCR/observation read path compares it against the authenticated
+principal (foreign rows answer 404). Direct database access is
+isolated by RLS owner policies with default-deny writes; legacy
+NULL-owner rows keep prior readability. Claims/reviews/audit
+events remain unowned (open gap, see `STAGE_17_OCR_PROVIDER_AND_OWNERSHIP.md`).
+
 ---
 
 ## Stage 2 — Ingredient Extraction

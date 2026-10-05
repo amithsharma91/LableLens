@@ -209,6 +209,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   live, +1 migration). 557/557 passing with live DB (506 passed +
   51 skipped without). Documented in `STAGE_16_OCR_BOUNDARY.md`;
   ADR-031.
+- Stage-17 OCR ownership + first real provider (V1–V7 untouched):
+  per-user ownership (`owner_subject`) on OCR runs, corrections,
+  and observations with service-layer 404 isolation plus RLS
+  owner policies and default-deny writes (migration 005, proven
+  idempotent after a mid-file-abort fix); all OCR and observation
+  routes pass the principal subject, including legacy NULL-owner
+  compatibility. OCR.space adapter behind the injected protocol
+  (key-only env config, full explicit failure taxonomy, bytes in
+  memory only, MockTransport-tested, never called live here).
+  Stage-15 VERIFIED cases stay VERIFIED; false positives remain
+  0. Documented in `STAGE_17_OCR_PROVIDER_AND_OWNERSHIP.md`;
+  ADR-032.
 
 ### Fixed
 - `entity_matches.selected_at` and `claim_sources.retrieved_at`

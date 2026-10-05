@@ -1401,3 +1401,63 @@ chemical confidence. Full analysis in
   credentials.
 - Generic blob/image storage: unjustified — document ids are
   opaque references and no image bytes are needed.
+
+---
+
+## ADR-032 — OCR Ownership and First Real Provider (Stage 17)
+
+**Status:** Accepted
+**Date:** 2026-10-05
+
+### Context
+
+Stage 16 left OCR runs globally readable to any authenticated
+principal, and extraction vendor-bound to fakes and client text.
+Stage 17 hardens both without touching the trust pipeline. Full
+analysis in `STAGE_17_OCR_PROVIDER_AND_OWNERSHIP.md`.
+
+### Decision
+
+1. Ownership is an authenticated-subject column (`owner_subject`)
+   on `ocr_runs` (NOT NULL), `ocr_corrections` (NOT NULL), and
+   `ingredient_observations` (NULL = pre-ownership legacy,
+   keeps prior readability). Never a token, provider account, or
+   display field.
+2. Enforcement is two-layer: services compare row owners and
+   answer foreign rows as 404 (anti-enumeration); RLS policies
+   predicate on `app.current_subject` with default-deny writes
+   and no-match-on-unset. Claims/reviews/audit stay unowned and
+   stated as open.
+3. The provider is OCR.space: free dev tier, key-only auth from
+   `OCR_SPACE_API_KEY`, one POST endpoint, an explicit failure
+   taxonomy, plain `httpx` with no SDK. Bytes travel in memory
+   only; credentials never log/persist/return. Deployment injects
+   the adapter explicitly; no auto-wiring.
+4. Four OCR routes pass the principal subject through; direct
+   observation routes do too, closing OCR-derived reads via old
+   endpoints. Rate budgets and envelopes unchanged.
+5. A migration-idempotency defect found by the suite (mid-file
+   abort on pre-existing policies rolling back column additions
+   under asyncpg's implicit transaction) was fixed with DROP
+   guards; re-application is provably clean.
+
+### Consequences
+
+- OCR data is isolated per user at both layers; negative tests
+  cover every route and the database directly.
+- Wiring a live vendor is configuration + one explicit adapter
+  construction; no test calls any external provider.
+- Corrupted OCR still resolves to nothing or honestly
+  unverified; Stage-15 VERIFIED cases stay VERIFIED.
+
+**Rejected alternatives:**
+- Owner derived from provider account identity: the provider is
+  not the LabelLens user and must never become one.
+- 403 on foreign rows: distinguishes "exists" from "missing" and
+  enables enumeration; 404 is the documented convention.
+- Per-table ownership shortcuts for claims/reviews: ownership
+  without a schema-wide `user_id` story would be theater;
+  recorded as the next gap instead.
+- Auto-wiring the provider from env inside `create_app`: hides
+  a credential-bearing decision inside a factory; explicit
+  injection keeps it visible and testable.

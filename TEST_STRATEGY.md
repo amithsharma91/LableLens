@@ -801,3 +801,25 @@ false-positive count is asserted at exactly 0.
 - Failure-mode gate: no test may assert a verified outcome from
   corrupted text; partial name/code agreement must remain
   unverified or unknown.
+
+### Stage-17 extension (2026-10-05)
+
+- Ownership tests: `app/tests/unit/test_ocr_ownership.py`
+  (create/read/correct/analyze isolation, stranger-404 on all
+  four operations, derived-observation ownership, rerun and
+  correction ownership, legacy NULL-row readability, repository
+  role rejection) plus cross-user API tests in
+  `test_api_ocr.py` (every OCR route and the direct observation
+  routes answer 404/`NOT_FOUND` to strangers, owner unaffected).
+- Provider tests: `app/tests/unit/test_ocr_space.py` — all 16
+  against injected `httpx.MockTransport` (success mapping,
+  no-chemistry/no-secret assertions, locator vs bytes paths,
+  missing/invalid key, quota message + HTTP 429, processing
+  errors, HTTP 500, malformed JSON, empty results, timeout,
+  network failure). No test calls any external provider.
+- Live tests: `test_ocr_postgres.py` gains owner threading plus
+  `test_live_rls_isolates_owners_at_the_database` (`SET ROLE
+  authenticated` + subject setting: per-owner SELECT visibility,
+  unset sees nothing, all authenticated writes denied, legacy
+  NULL rows visible). Migration 005 re-application is covered
+  by the static migration tests after an idempotency fix.
