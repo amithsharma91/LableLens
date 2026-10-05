@@ -58,6 +58,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (citric acid, sodium benzoate, glycerol, ethanol) with per-field
   provenance, quality over quantity. No live providers, RDKit, AI,
   migrations, or endpoints. 113/113 passing.
+- Stage-8 official evidence adapters (internal capability, V1–V7
+  untouched): bounded shared HTTP layer, typed evidence model with
+  conflict detection, deterministic evidence cache with offline mode,
+  read-only PubChem (PUG-REST) and ChEBI (2.0 REST) adapters behind
+  the existing `VerificationSource` contract, `CombinedAdapter`
+  fan-out, provider-conflict mapping to the existing `conflicted`
+  branch. Endpoints verified against official docs + live shapes.
+  176/176 passing.
 
 ### Fixed
 - Parser strips a leading `Ingredients:` label header (per `DATA_PIPELINE.md`

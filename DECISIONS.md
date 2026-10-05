@@ -675,3 +675,53 @@ non-molecular entities that legitimately carry no identifiers.
 **Rejected alternatives:**
 - Auto-accepting older-rule snapshots with a warning only: warnings are
   ignorable downstream; the status downgrade is enforced in the type.
+
+---
+
+## ADR-021 — Official Evidence Without Verification Authority (Stage 8)
+
+**Status:** Accepted
+**Date:** 2026-10-05
+
+### Context
+
+Stage 7 verifies against a local snapshot. Stage 8 adds live official
+sources (PubChem PUG-REST, ChEBI 2.0 REST -- endpoints verified against
+official docs and live response shapes) as *evidence*, while keeping the
+frozen V1–V7 gate as the sole decider.
+
+### Decision
+
+1. Evidence and verification stay in separate modules: adapters produce
+   field-level `EvidenceItem` rows; `CombinedAdapter` merges provider
+   record lists with no entity linking and no semantics of its own.
+2. The evidence cache stores parsed items with hash/TTL metadata and
+   replays them byte-identically; a hit never upgrades or refreshes.
+   Offline mode serves cache or degrades to `unknown`.
+3. Provider-provider field conflicts (formula, InChIKey, weight,
+   doubly-claimed identifiers) map to the pre-existing `conflicted`
+   branch -- the only orchestrator change, justified by Stage-6
+   conflict case 6. Raw SMILES/InChI strings are excluded from
+   auto-conflict (serialization differs without chemical difference).
+4. All network behavior is confined to one shared HTTP module with
+   timeouts, size bounds, bounded retries (transient + selected 5xx
+   only; never 400/404/429), and conservative spacing. Official quotas
+   are not asserted; spacing is documented as conservative.
+5. Salt-form verification remains blocked on provider evidence alone
+   (structure records carry no reliable form signal) -- tested and
+   documented as a limitation, not worked around.
+
+### Consequences
+
+- New providers = new adapter + registry entry; gate, orchestrator
+  mapping, and tests for prior stages are untouched.
+- Any future live use must add quota verification against current
+  official docs plus a secrets/egress review; tests stay offline.
+
+**Rejected alternatives:**
+- Provider-returned "verified" flags or first-result assumption:
+  payloads are data; only whitelisted fields are extracted.
+- Cross-provider entity ID linking by assumption: agreement must come
+  from field/identifier overlap.
+- Canonicalizing SMILES for comparison without cheminformatics:
+  would invent chemistry comparison the project cannot defend.
