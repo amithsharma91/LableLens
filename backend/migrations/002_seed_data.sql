@@ -19,7 +19,7 @@ INSERT INTO sources (id, name, source_type, authority_level, status) VALUES
   ('d4444444-4444-4444-4444-444444444444', 'RDKIT', 'software_methodology', 'high', 'approved'),
   ('e5555555-5555-5555-5555-555555555555', 'FSSAI_FOOD_REGS', 'regulatory', 'high', 'approved'),
   ('f6666666-6666-6666-6666-666666666666', 'CODEX_GSFA', 'regulatory', 'high', 'approved'),
-  ('g7777777-7777-7777-7777-777777777777', 'EU_FOOD_ADDITIVES', 'regulatory', 'high', 'approved'),
-  ('h8888888-8888-8888-8888-888888888888', 'FDA_FOOD_ADDITIVES', 'regulatory', 'high', 'approved'),
-  ('i9999999-9999-9999-9999-999999999999', 'EU_COSING', 'informational', 'high', 'approved')
+  ('77777777-7777-7777-7777-777777777777', 'EU_FOOD_ADDITIVES', 'regulatory', 'high', 'approved'),
+  ('88888888-8888-8888-8888-888888888888', 'FDA_FOOD_ADDITIVES', 'regulatory', 'high', 'approved'),
+  ('99999999-9999-9999-9999-999999999999', 'EU_COSING', 'informational', 'high', 'approved')
 ON CONFLICT DO NOTHING;
