@@ -160,6 +160,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   claims/sources with audit rows intact). 471/471 passing with live
   DB (428 passed + 43 skipped without). Documented in
   `STAGE_13_REAL_LABEL_VERTICAL_SLICE.md`; ADR-028.
+- Stage-14 systematic names and verified-path verdict (V1–V7
+  untouched): traced the locant defect to the parser (unconditional
+  comma-splitting broke `1,2,3` runs; the trailing-code pattern read
+  word-final `e`+digits as E-codes) and fixed it syntactically
+  (digit-comma-digit never separates; code tags need a token
+  boundary), unlocking registered systematic-name aliases with no
+  suite regressions. Independently reviewed all four Stage-13
+  fixtures (byte-identical transcriptions, scope notes, and
+  correction separation confirmed; audit blocks added; everything
+  stays draft). Added genuinely sourced identifier-bearing fixture
+  RL-14-01 (Frooti, retailer-secondary): `INS 330` resolves exactly
+  to citric acid with an honestly unverified decision, pinning the
+  frozen V3/V4 dual-agreement rule. The real-label VERIFIED
+  criterion is reported NOT MET rather than simulated (no quotable
+  English name+code co-printing found; review loop cannot waive
+  dual agreement; PubChem/transcript double-counting rejected).
+  Tests: 15 new (10 systematic-name unit, 4 regression, 1 live).
+  486/486 passing with live DB (442 passed + 44 skipped without);
+  regression CLI passes. Documented in
+  `STAGE_14_SYSTEMATIC_NAMES_AND_VERIFIED_PATH.md`; ADR-029.
 
 ### Fixed
 - `entity_matches.selected_at` and `claim_sources.retrieved_at`

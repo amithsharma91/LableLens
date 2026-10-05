@@ -744,3 +744,22 @@ corroborate itself); the `glycerin` synonym gap, generic terms
 substances stay unresolved. The §12 gates are not applied to this
 4-label slice (it is a pipeline proof, not a market sample); the
 false-positive count is asserted at exactly 0.
+
+### Stage-14 extension (2026-10-05)
+
+- Added `RL-14-01` (Frooti Mango Drink 1L, retailer-secondary
+  transcription, draft): an identifier-bearing English label. Its
+  `Acidity Regulator (INS 330)` node resolves `exact_match` to
+  citric acid with an honestly `unverified` decision, pinning the
+  frozen V3/V4 name+identifier dual-agreement rule; nested INS
+  children stay in the parse tree; the retailer's own unbalanced
+  parenthesis is preserved literally.
+- Systematic-name syntax fix (parser only): locants and
+  hyphenation survive intact, registered systematic-name aliases
+  now resolve, unregistered ones stay unresolved.
+- Current slice metrics (57 ingredients): 5 exact matches, 2
+  candidates, 50 unresolved; 4 provisional, 1 unverified, 52
+  unknown, 0 verified, 0 conflicted, 0 false positives. The
+  real-label VERIFIED criterion is documented as not met
+  (`STAGE_14_SYSTEMATIC_NAMES_AND_VERIFIED_PATH.md` §4) rather
+  than simulated.

@@ -1209,3 +1209,73 @@ provenance marked). Full analysis in
 - A `PATCH /observations` route: the product has no frontend or
   accounts yet; a route would add unaudited write surface for no
   user.
+
+---
+
+## ADR-029 — Systematic-Name Syntax Fix and the Unmet Verified Path (Stage 14)
+
+**Status:** Accepted
+**Date:** 2026-10-05
+
+### Context
+
+Stage 13 left two items: a confirmed normalization defect
+(`propane-1,2,3-triol` damaged into `propan E 1`) and zero verified
+outcomes across 50 real-label ingredients. Stage 14 addressed both.
+Full analysis in
+`STAGE_14_SYSTEMATIC_NAMES_AND_VERIFIED_PATH.md`.
+
+### Decision
+
+1. The defect was in the parser, not the normalizer: unconditional
+   comma-splitting broke locant runs, and the trailing
+   additive-code pattern matched word-final `e` + digits without a
+   token boundary. The fix is syntactic only -- digit-comma-digit
+   without whitespace never separates; a code tag must start at a
+   token boundary. No chemistry knowledge entered either module;
+   resolver ranking is untouched.
+2. The fix unlocks registered systematic-name aliases through the
+   existing path (`propane-1,2,3-triol` -> glycerol via
+   `exact_alias`); unregistered systematic names stay unresolved.
+3. RL-14-01 (Frooti, retailer-secondary, draft) proves exact
+   identifier resolution on a real label (`INS 330` -> citric
+   acid) with an honestly unverified decision: function-names
+   agree with no record, and frozen V3/V4 require name+identifier
+   dual agreement on one record.
+4. The real-label VERIFIED criterion is reported NOT MET rather
+   than simulated: no quotable English name+code co-printing was
+   found (labelling formats print a name or a code, not both), the
+   review loop cannot waive dual agreement (human confirmation of
+   a bare name yields provisional/MEDIUM at best), and counting
+   PubChem against its own transcript as corroboration was
+   rejected as verification theater.
+5. Leading codes, trailing CI codes, and the global
+   uncertain-parse downgrade on unbalanced input stay as
+   documented limitations, not silent behavior.
+
+### Consequences
+
+- Systematic names survive the pipeline intact with no suite
+  regressions; alias coverage grows through registration data,
+  not code.
+- Identifier resolution and the dual-agreement refusal are both
+  regression-pinned, so future registry growth is checked in
+  both directions (resolve what is registered; refuse what is
+  not agreed).
+- The verified path stays proven only on synthetic inputs until
+  a genuine name+code label is sourced; the Frooti fixture
+  documents exactly what such a label must contain.
+
+**Rejected alternatives:**
+- "Fixing" the normalizer output for locants: the damage happened
+  upstream in the parser; patching downstream would leave split
+  nodes and phantom identifiers in place.
+- Splitting spaced digit-commas too (`1, 2`): genuinely
+  list-like; only the unambiguous no-whitespace numeric run is
+  protected.
+- Marking the Frooti ingredient verified on identifier strength
+  alone: contradicts the frozen dual-agreement rule this stage
+  was asked to preserve.
+- Adding PubChem live calls to manufacture a second record: the
+  transcript IS PubChem; two records, one source, zero new
+  corroboration.
