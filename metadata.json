@@ -1,0 +1,6 @@
+{
+  "name": "LabelLens",
+  "description": "A computational-chemistry-powered product label intelligence platform. Inspect ingredients, molecular data, evidence-based functional roles, and chemical reality without pseudo-scientific classifications.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
