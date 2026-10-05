@@ -91,6 +91,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   connection/transaction per request on the serving event loop.
   289/289 passing with live DB (276 passed + 13 skipped without).
   Documented in `STAGE_11_API.md`; ADR-024.
+- Stage-12 production readiness (V1–V7 untouched), three parts and
+  **no new HTTP route**:
+  - **A — Supabase JWT verification** (`app/api/supabase_jwt.py`,
+    `app/api/jwks.py`, `app/api/auth.py`): real signature/issuer/
+    audience/expiry/not-before/subject validation against the project
+    JWKS document, no decode-without-verify path, asymmetric
+    algorithms only (symmetric projects fail closed), a bounded JWKS
+    cache (TTL 300 s, min-refresh cooldown 30 s, ≤16 keys, 64 KB cap,
+    HTTPS only) that survives key rotation, reviewer authority from
+    the operator allowlist `SUPABASE_REVIEWER_SUBJECTS` only,
+    rejection of privileged `role` claims so the backend credential
+    can never act as a person, one uniform 401 for every failure
+    category, fail-closed construction in production (no Supabase
+    config, or any `DEV_API_TOKENS` in production → refuse to start,
+    never a silent fallback), and principals that carry only trusted
+    identity (`human:{subject}` preserved). `PyJWT[crypto]` added.
+  - **B — controlled canonical entity registration**
+    (`app/services/registration.py`,
+    `app/cli/import_canonical_entities.py`): service-role CLI import
+    of approved snapshot records only, with an
+    `ENTITY_IMPORT_CONFIRM=service-role` interlock and no route.
+    Whole-artifact validation before any write, deterministic
+    rejection report, all-or-nothing transaction, stable entity
+    identity, `ON CONFLICT DO NOTHING` idempotency, entity types and
+    mixtures preserved, and full provenance in
+    `chemical_entities.metadata`. The resolver registry is projected
+    from those rows at startup (`build_registry`), failing safe to an
+    empty registry. No new migration: `metadata`,
+    `first_verified_at`, and `last_verified_at` already existed.
+  - **C — application rate limiting** (`app/services/rate_limit.py`,
+    `app/api/limits.py`): a `RateLimiter` protocol plus a bounded
+    in-memory fixed-window limiter keyed on the authenticated
+    principal (never a client-supplied id or payload field), applied
+    to `POST /api/v1/observations`,
+    `POST /api/v1/observations/{id}/analyze`, and
+    `POST /api/v1/reviews/{id}/decision`. Denial is
+    `429 RATE_LIMITED` in the standard envelope with a `Retry-After`
+    header; a limiter failure is `503 RATE_LIMITER_UNAVAILABLE`
+    (fail closed). Budgets are configuration-driven
+    (`RATE_LIMIT_*`), reads are never limited, and the single-process
+    scope is documented rather than implied. No new table.
+  - Tests: 155 new (JWT 35, rate limiter 24, registration 36,
+    Supabase-auth API 18, rate-limit API 17, live registration 18,
+    live end-to-end production flow 7). 444/444 passing with live
+    Postgres, 406 passed + 38 skipped without; import re-verified on
+    a fresh database. Documented in
+    `STAGE_12_PRODUCTION_READINESS.md`; ADR-025, ADR-026, ADR-027.
 
 ### Fixed
 - `entity_matches.selected_at` and `claim_sources.retrieved_at`

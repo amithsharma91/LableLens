@@ -1,6 +1,6 @@
 # LabelLens Security Policy
 
-**Last updated:** 2026-10-04  
+**Last updated:** 2026-10-05
 **Project:** LabelLens — ingredient label scanning and analysis platform
 
 ---
@@ -170,13 +170,28 @@ User → Next.js frontend
 
 ### Stage-11 API Boundary (implemented 2026-10-05)
 
-- Bearer tokens map to typed principals (`subject`, `reviewer`|`authenticated` role) via a verifier interface. Development/tests use an explicit static map (`DEV_API_TOKENS`); Supabase JWT verification is the documented production path (not yet implemented).
+- Bearer tokens map to typed principals (`subject`, `reviewer`|`authenticated` role) via a verifier interface. Development/tests use an explicit static map (`DEV_API_TOKENS`); Supabase JWT verification is the documented production path (implemented in Stage 12, see 4.1).
 - Reviewer identity is derived as `human:{subject}` server-side; request bodies cannot assert `reviewer`/`actor` (rejected as unknown fields).
 - Reads require authentication; review claim/decision require the reviewer role (403 otherwise). No anonymous access exists yet.
 - Request correlation IDs are issued/echoed (`X-Request-ID`); logs carry endpoint/subject/outcome/category only -- never tokens, labels, or secrets.
 - Error responses follow the API envelope and never leak stack traces, SQL, provider payloads, or credentials.
 - Data routes require an injected repository boundary; an app assembled without one answers health and fails data routes with a controlled 500 rather than an unhandled error.
 - Canonical entities are never created by the API: a decision naming an unregistered entity is rejected (422 `ENTITY_NOT_FOUND`) before any write, so the claim foreign key is enforced in application code and by the database.
+
+### 4.1 Stage-12 Production Authentication Boundary (implemented 2026-10-05)
+
+The Stage-11 "documented future" identity is now real. Full detail in `STAGE_12_PRODUCTION_READINESS.md` §2; decision in `DECISIONS.md` ADR-025.
+
+- **Signature always verified.** `app/api/supabase_jwt.py` verifies the signature against the project JWKS document (`<SUPABASE_URL>/auth/v1/.well-known/jwks.json`). There is no decode-without-verify path, no trusted-network bypass, and no verification escape hatch.
+- **Bound key material.** The token's `alg` is bound to the JWK (`PyJWK(entry, algorithm=alg)`), so a key published for one algorithm cannot verify a token signed with another. Configured algorithms are asymmetric only (`ES256`, `RS256`); symmetric (HS256) projects fail closed, because Supabase publishes no keys for them and does not recommend shared secrets.
+- **Claim validation.** `iss`, `aud`, `exp`, `nbf`, `iat` and `sub` are validated; `exp`/`iss`/`sub` are required. Clock skew tolerance is configurable (`SUPABASE_JWT_LEEWAY_SECONDS`, default 60 s).
+- **Backend credentials are not identities.** Tokens whose `role` claim is a database role (`service_role`, `service_role_backend`, `supabase_admin`, `supabase_auth_admin`, `supabase_storage_admin`, `postgres`, `anon`, `authenticated_api`) are rejected, so the service-role key cannot authenticate as a person.
+- **Reviewer authority is operator-controlled only.** The reviewer role comes exclusively from the `SUPABASE_REVIEWER_SUBJECTS` allowlist. User-writable claims (`user_metadata`, `app_metadata`, custom claims) are never read for authorization, so no user can self-grant review rights.
+- **Bounded JWKS caching.** HTTPS only; TTL (`SUPABASE_JWT_JWKS_TTL_SECONDS`, default 300 s, below the 10-minute edge cache Supabase documents); minimum-refresh floor (`SUPABASE_JWT_JWKS_MIN_REFRESH_SECONDS`, default 30 s) that also applies to *failed* fetches, so bogus `kid`s cannot drive a fetch flood; at most `SUPABASE_JWT_JWKS_MAX_KEYS` (16) keys and 64 KB per response; a single lock serializes refreshes. Key rotation works without a restart; a retired key is trusted only until the TTL expires (bounded, documented grace window).
+- **Fail closed on misconfiguration.** Under `ENVIRONMENT=production`: no Supabase issuer/JWKS, no algorithm, or any `DEV_API_TOKENS` present raises instead of building the app. There is no silent fallback to a weaker boundary.
+- **Uniform public failure.** Bad signature, expiry, `nbf`, issuer, audience, algorithm, missing `sub`, unknown `kid`, malformed token, and JWKS unavailability all return the identical `401 UNAUTHORIZED` / `authentication required` with empty details. The specific reason exists only in an internal log line (category, never token material), so a caller gets no verification oracle.
+- **No token handling.** Tokens and claims are never logged, returned in a response body, or persisted. Oversized tokens (> 4096 characters) are rejected before parsing. `Principal` carries only trusted identity: subject, role, issuer, `kid`, expiry, and the server-derived `human:{subject}` reviewer id -- no email, phone, or other client-controlled field.
+- **Residual risk:** the verifier has been tested against a mocked JWKS transport, never a live Supabase project. Validating it against the real project (rotation included) is a deployment step.
 
 ---
 
@@ -246,6 +261,37 @@ Rate limiting is applied at the API boundary to protect high-cost endpoints from
 - Rate limit headers (`X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`) should be returned to clients.
 - Exceeding a limit returns `HTTP 429 Too Many Requests` with a `Retry-After` header. Do not return a 200 with a soft error body.
 - In production, move rate limiting to the edge/API gateway layer for better resilience against distributed abuse.
+
+### Stage-12 Implementation (2026-10-05)
+
+Implemented in `app/services/rate_limit.py` and `app/api/limits.py`; decision in `DECISIONS.md` ADR-027.
+
+| Action | Route | Default budget |
+|---|---|---|
+| `observations.create` | `POST /api/v1/observations` | 30 / 60 s |
+| `observations.analyze` | `POST /api/v1/observations/{id}/analyze` | 20 / 60 s |
+| `reviews.decision` | `POST /api/v1/reviews/{id}/decision` | 20 / 60 s |
+
+All other routes are unlimited. Those three are the only operations
+that trigger the resolver, the frozen gate, and provider evidence
+fetches.
+
+- **Identity comes from authentication.** The bucket key is `"<action>|<verified subject>"`, optionally plus the peer address (`RATE_LIMIT_INCLUDE_IP`, default off: behind a proxy the peer address is the proxy's). No header (`X-User-ID`, `X-Reviewer-ID`, ...) and no request-body field can influence it — a caller cannot widen or redirect another identity's bucket.
+- **Backends are pluggable.** `RateLimiter` is a one-method protocol, so a shared Redis or database store replaces the in-memory implementation without touching routes or domain code. The `InMemoryRateLimiter` uses fixed, lazily expired windows and an injectable clock, and is bounded by `RATE_LIMIT_MAX_KEYS` (LRU eviction): a bounded limiter degrades accuracy, never correctness.
+- **Refusal is uniform.** `429` with the §7 code `RATE_LIMITED` in the standard envelope plus a `Retry-After` header (`details.retry_after_seconds` mirrors it). No bucket internals, subjects, or counters are disclosed.
+- **Fails closed.** If the limiter backend raises, the request is refused with `503 RATE_LIMITER_UNAVAILABLE` and the sensitive write does not happen. Degrading to "allow" would disable the control exactly when the backend is unhealthy.
+- **Configuration-driven.** `RATE_LIMIT_ENABLED`, `RATE_LIMIT_OBSERVATION_CREATE`, `RATE_LIMIT_ANALYZE`, `RATE_LIMIT_REVIEW_DECISION`, `RATE_LIMIT_INCLUDE_IP`, `RATE_LIMIT_MAX_KEYS` (values are `count/window_seconds`). No route contains a hard-coded limit, and no rate-limit table was added to the database.
+- **Role check first.** The review-decision route runs `require_reviewer` before consuming a bucket, so an unauthorized caller cannot spend a reviewer's budget.
+- **Known limitation — single process.** State lives in one API process's memory: N replicas multiply the effective budget by N, and a restart clears all buckets. This is documented, tested, and **not** described as distributed protection. Moving to a shared backend remains a deployment task, not a code rewrite.
+- **Not implemented here:** `X-RateLimit-*` response headers, per-IP global limits, and edge/gateway limiting. Those remain recommendations in the checklist below.
+
+### Canonical Entity Registration (implemented 2026-10-05)
+
+- Canonical chemistry is registered **only** by the administrative CLI `app/cli/import_canonical_entities.py`, which requires direct service-role database credentials and an explicit `ENTITY_IMPORT_CONFIRM=service-role` interlock. There is no route, admin endpoint, or request body that can create an entity, and the API process never holds that confirmation value.
+- Only approved records from a versioned snapshot are registrable (`verification_status = verified`, approved entity/representation types, complete provenance); no chemistry is computed or inferred.
+- The run validates the whole artifact first, writes all-or-nothing in one transaction, is idempotent on re-run, and reports rejections deterministically.
+- Provenance is stored in `chemical_entities.metadata`, so every registered entity answers "why does this exist, and from where?".
+- The resolver registry is projected from those rows at startup. A failed load leaves it empty (candidates unresolved) rather than partially populated, and no live provider response is ever injected into it.
 
 ---
 
@@ -378,9 +424,11 @@ Complete every item before deploying to a production or publicly accessible envi
 
 ### Rate Limiting
 
-- [ ] High-cost endpoints (OCR, AI analysis) have rate limits configured and tested
-- [ ] `HTTP 429` response confirmed when limits are exceeded
-- [ ] Rate limiting fires before dispatching to expensive downstream services
+- [x] High-cost endpoints that exist today (`POST /api/v1/observations`, `.../analyze`, `POST /api/v1/reviews/{id}/decision`) have rate limits configured and tested
+- [x] `HTTP 429` with `Retry-After` confirmed when limits are exceeded
+- [x] Rate limiting fires before dispatching to expensive downstream services
+- [ ] `X-RateLimit-*` response headers returned to clients
+- [ ] Shared (Redis) limiter backend if more than one API replica is deployed
 
 ### CORS and Headers
 

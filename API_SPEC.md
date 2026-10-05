@@ -2733,8 +2733,8 @@ POST /api/v1/reviews/{id}/decision             validated, re-verified via V1-V7
 
 Authentication: `Authorization: Bearer <token>` -> typed principal
 (subject/role); development uses an explicit static map
-(`DEV_API_TOKENS`), production will use Supabase JWT verification
-(documented future, not implemented). Reviewer identity is derived
+(`DEV_API_TOKENS`). Supabase JWT verification was deferred at this
+stage and is implemented in §101. Reviewer identity is derived
 as `human:{subject}`; request bodies cannot assert identity.
 Approval scope is identity-only (schema-enforced, 422 otherwise).
 Errors follow the §6 envelope with spec §7 codes; request IDs are
@@ -2746,3 +2746,106 @@ Canonical-entity prerequisite: `analyze` and `decision` fail with
 422 `ENTITY_NOT_FOUND` when the decision names an entity that is not
 present in `chemical_entities`. Registering entities is a service-role
 import with no route (the API never creates chemistry).
+
+---
+
+# 101. Stage-12 Implemented Boundary (2026-10-05)
+
+No route was added or removed in Stage 12. The implemented changes
+are authentication strength, entity registration, and rate limiting on
+existing routes. Full analysis in
+`STAGE_12_PRODUCTION_READINESS.md`.
+
+## 101.1 Authentication (was "documented future" in §100)
+
+```text
+Authorization: Bearer <supabase access token (JWT)>
+```
+
+Production identity is real Supabase JWT verification
+(`app/api/supabase_jwt.py`), replacing the static token map behind the
+same `TokenVerifier` interface:
+
+- signature, `alg` (bound to the key), `kid`, `iss`, `aud`, `exp`,
+  `nbf`, `iat` and `sub` are verified; there is no decode-only path;
+- keys come from the project JWKS document
+  (`<SUPABASE_URL>/auth/v1/.well-known/jwks.json`), cached with a
+  bounded TTL and refresh floor that also bounds failed fetches;
+- asymmetric algorithms only (`ES256`, `RS256`); a symmetric (HS256)
+  project fails closed;
+- tokens whose `role` claim is a database role (`service_role`,
+  `anon`, ...) are rejected, so the backend credential cannot
+  authenticate as a user;
+- reviewer authority comes only from `SUPABASE_REVIEWER_SUBJECTS`;
+  token claims are never consulted for authorization;
+- every failure category returns the identical §6/§7 response
+  `401 UNAUTHORIZED` / `authentication required`; the internal reason
+  is logged, never returned;
+- `ENVIRONMENT=production` with no Supabase configuration, or with
+  `DEV_API_TOKENS` set, refuses to build the application (503 at
+  startup), never a silent fallback.
+
+Development may still use `DEV_API_TOKENS` (`token:subject:role`);
+when Supabase verification is configured it takes precedence.
+
+## 101.2 Canonical entity registration
+
+```text
+DATABASE_URL=postgresql+asyncpg://... ENTITY_IMPORT_CONFIRM=service-role \
+    python -m app.cli.import_canonical_entities \
+    [--snapshot PATH] [--expect-snapshot-version canonical_v1]
+```
+
+- administrative CLI only; **no HTTP route** registers an entity
+  (§100's `ENTITY_NOT_FOUND` prerequisite is unchanged and now has a
+  real producer);
+- approved records only (`verification_status = verified`, approved
+  entity/representation types, complete provenance), no chemistry is
+  computed or inferred;
+- whole-artifact validation before any write; all-or-nothing
+  transaction; deterministic JSON report of rejections; idempotent
+  re-runs (`ON CONFLICT DO NOTHING`, stable entity ids);
+- provenance is stored in `chemical_entities.metadata`;
+- the resolver registry is projected from those rows at startup; a
+  failed load leaves it empty (all candidates unresolved). A re-run
+  requires an application restart to become visible.
+
+## 101.3 Rate limiting (429 / 503)
+
+Limited operations, keyed on the authenticated principal:
+
+```text
+POST /api/v1/observations                    observations.create   30/60s
+POST /api/v1/observations/{id}/analyze       observations.analyze  20/60s
+POST /api/v1/reviews/{id}/decision           reviews.decision      20/60s
+```
+
+All other routes are unlimited. Budgets are configuration
+(`RATE_LIMIT_OBSERVATION_CREATE`, `RATE_LIMIT_ANALYZE`,
+`RATE_LIMIT_REVIEW_DECISION`, `RATE_LIMIT_ENABLED`); no route contains
+a hard-coded limit.
+
+Refusal (§7 `RATE_LIMITED`, §8 `429`), with §9 request correlation:
+
+```http
+HTTP/1.1 429 Too Many Requests
+Retry-After: 60
+```
+
+```json
+{"error": {"code": "RATE_LIMITED", "message": "too many requests",
+           "details": {"retry_after_seconds": 60,
+                       "action": "observations.create"}},
+ "meta": {"request_id": "…", "api_version": "v1"}}
+```
+
+`details.action` names the limited operation and `retry_after_seconds`
+mirrors the `Retry-After` header; no bucket internals, subjects, or
+counters are disclosed. When the limiter backend fails, the write is
+refused with §8 `503` and §7 `RATE_LIMITER_UNAVAILABLE` (fail closed)
+rather than admitted.
+
+The identity used for bucketing comes from the verified token; no
+header or body field can influence it. The shipped limiter is
+in-process and therefore per replica — a shared backend is the
+documented next step.

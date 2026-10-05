@@ -875,3 +875,260 @@ production identity prematurely. Full analysis in
   no atomic scope per operation.
 - Writing claims with a null entity link when the entity is
   unknown: silently drops provenance the record exists to carry.
+
+---
+
+## ADR-025 — Supabase JWKS Verification as the Production Identity (Stage 12)
+
+**Status:** Accepted
+**Date:** 2026-10-05
+
+### Context
+
+ADR-024 defined the `TokenVerifier` interface and deliberately left
+the production identity unimplemented ("documented future"). Stage 11
+shipped with static development tokens only, which cannot be
+exposed to real users. Supabase's current signing model
+(supabase.com/docs/guides/auth/jwts, /guides/auth/signing-keys) is
+asymmetric: the project publishes a JWKS document at
+`<SUPABASE_URL>/auth/v1/.well-known/jwks.json`, tokens carry a `kid`,
+and the edge caches the key set for 10 minutes. Full analysis in
+`STAGE_12_PRODUCTION_READINESS.md` §2.
+
+### Decision
+
+1. `TokenVerifier` stays provider-independent; `verify` becomes
+   `async` because the production verifier performs network I/O. The
+   `StaticTokenVerifier` survives for development and tests and is
+   made async to match the protocol.
+2. Tokens are always signature-verified. There is no decode-only
+   path, no "trust the claims" shortcut, and no verification bypass
+   for trusted networks.
+3. Verified: signature, `alg` bound to the key, `kid`, `iss`, `aud`,
+   `exp`, `nbf`, `iat`, `sub`. `exp`/`iss`/`sub` are required;
+   configured algorithms are asymmetric only, so a symmetric (HS256)
+   project fails closed rather than being silently accepted through
+   a shared secret.
+4. Tokens whose `role` claim is a database role (`service_role`,
+   `anon`, `supabase_admin`, ...) are rejected. The backend's own
+   credential is not a user identity, so it can never authenticate as
+   a person.
+5. Reviewer authority comes only from the operator allowlist
+   `SUPABASE_REVIEWER_SUBJECTS`. User-writable claims
+   (`user_metadata`, `app_metadata`, custom claims) are never read
+   for authorization.
+6. The JWKS document is cached in-process with a bound on every
+   dimension: HTTPS only, TTL (300 s, below the documented 10-minute
+   edge cache), a minimum-refresh floor (30 s) that also applies to
+   *failed* fetches, ≤16 keys, ≤64 KB per response, one lock for
+   refresh serialization. A retired key stays trusted only until the
+   TTL expires — a bounded, documented grace window.
+7. Configuration is entirely environmental, and construction fails
+   closed in production: no Supabase issuer/JWKS, no algorithm, or
+   any `DEV_API_TOKENS` present under `ENVIRONMENT=production` all
+   raise instead of degrading to a weaker boundary. When Supabase is
+   configured, it wins over the static map.
+8. Every failure category (bad signature, expiry, `nbf`, issuer,
+   audience, algorithm, missing `sub`, unknown `kid`, malformed token,
+   JWKS unreachable) produces one identical public 401. The specific
+   reason exists only as an internal diagnostic string that is logged
+   and never returned, so callers get no oracle. Tokens and claims
+   are never logged, returned, or persisted; `MAX_TOKEN_CHARS`
+   rejects oversized input before parsing.
+9. `Principal` carries only trusted identity: subject, role, issuer,
+   `kid`, expiry, and the server-derived `human:{subject}` reviewer
+   id.
+
+### Consequences
+
+- The Stage-11 auth contract is preserved: only the verifier
+  implementation changed, so routes, services, and tests kept their
+  shapes.
+- Key rotation works without a restart; a new `kid` triggers at most
+  one refresh per cooldown window, so bogus key ids cannot drive a
+  fetch flood.
+- Static tokens are impossible in production — a misconfiguration is
+  a startup failure, not a quiet downgrade.
+- JWKS fetch latency and availability are on the request path. The
+  timeout is 5 s; failure is a 401, never an acceptance.
+- Symmetric Supabase projects are unsupported by design.
+- The verifier has only been exercised against a mocked JWKS
+  transport. Running it against a live project is the first
+  deployment check.
+
+**Rejected alternatives:**
+- Decoding claims without verifying the signature: anyone could mint
+  a subject, including a reviewer.
+- HS256 support with a configured shared secret: Supabase publishes
+  no keys for symmetric projects and does not recommend it.
+- Reviewer role read from a token claim: self-grantable by anyone who
+  can edit their own profile.
+- Unbounded JWKS refetch on unknown `kid`: a trivial remote amplifier.
+- A configurable "skip verification in production" escape hatch: the
+  exact failure this stage exists to remove.
+- Distinguishing failure reasons in the HTTP response: hands an
+  attacker a verification oracle.
+
+---
+
+## ADR-026 — Canonical Entity Registration Is a Service-Role Import (Stage 12)
+
+**Status:** Accepted
+**Date:** 2026-10-05
+
+### Context
+
+Stage 11 surfaced a real integration prerequisite: a decision naming a
+canonical entity is only persisted when `chemical_entities` actually
+contains that entity (ADR-024 §6), and no path created those rows —
+tests seeded them by hand. Production therefore needs a way to
+populate the canonical registry. The master brief is explicit that
+the system never invents chemistry: only approved records may exist,
+no user-created entities, no bulk auto-verification. Full analysis in
+`STAGE_12_PRODUCTION_READINESS.md` §3.
+
+### Decision
+
+1. The only registration path is the CLI
+   (`app/cli/import_canonical_entities.py`). There is no route, no
+   admin endpoint, and no request body that can create an entity.
+2. The command requires direct database credentials (the service
+   role) *and* an explicit `ENTITY_IMPORT_CONFIRM=service-role`
+   interlock; without it the command refuses and exits 1 before any
+   connection is opened. The API process never sets it.
+3. Only approved canonical records are registrable: the artifact's
+   `verification_rule_version` must equal the frozen gate version
+   `1.0.0`, an optional `--expect-snapshot-version` must match, every
+   record must be `verification_status = verified`, entity and
+   representation types must be in the approved vocabulary, and
+   provenance must be complete. No chemistry is computed, derived, or
+   inferred — values are transcribed verbatim.
+4. The whole artifact is validated before any write. One
+   unacceptable record raises `RegistrationRejected` carrying a
+   deterministic report of every rejection reason, and nothing is
+   written. The report is stable JSON with no timestamps.
+5. Writes are all-or-nothing in one transaction; a rejected write
+   (for example a constraint violation) propagates so no partial
+   state survives. Entity and alias inserts use `ON CONFLICT DO
+   NOTHING`, and entity identity is stable (UUID verbatim, otherwise
+   `uuid5("canonical-entity:<id>")`), so re-running the import is
+   idempotent and cannot create a second identity.
+6. Provenance is stored in the existing `chemical_entities.metadata`
+   JSONB document together with `first_verified_at`/`last_verified_at`
+   — no new table and no new migration.
+7. The resolver registry is a projection of the registered rows
+   (`build_registry`), built at startup. A failed load leaves the
+   registry empty (candidates unresolved) rather than partially
+   populated, and no live provider response is ever injected into
+   it. `RegistryEntry.ref` remains registry-local, preserving the
+   Stage-5 invariant that a resolver match is not an entity identity.
+8. A re-run of the import reaches the resolver only after an
+   application restart; there is deliberately no reload endpoint.
+
+### Consequences
+
+- The canonical registry can only contain records a human approved
+  in a versioned artifact, with a locatable source for each one.
+- Operators need database credentials to register chemistry, not an
+  API session; this matches the security policy that canonical
+  chemistry writes are server-side only.
+- Tests must register entities through the import (or a fixture that
+  mirrors it) instead of inventing rows, so the registration
+  prerequisite is exercised rather than bypassed.
+- Registry contents are only as fresh as the last process start.
+- `chemical_entities` and `ingredient_aliases` remain without RLS
+  (service-role only). Enabling it is a Stage-13 candidate, not a
+  silent omission.
+
+**Rejected alternatives:**
+- A `POST /api/v1/entities` admin route: any authenticated caller
+  could attempt to create chemistry, and it would need a second
+  authorization path for no benefit.
+- Seeding entities from a live provider response: a lookup would
+  return whatever the provider said at that moment, which is
+  auto-verification by side effect.
+- Storing provenance in a new table: an extra table for data that
+  `metadata` already holds, plus a migration for no query gain.
+- Importing records that are merely "not rejected": provisional and
+  conflicted records are exactly the ones a human must resolve first.
+- Per-record commits: a partially imported registry is a registry
+  nobody can reason about.
+
+---
+
+## ADR-027 — Application Rate Limiting on Sensitive Writes (Stage 12)
+
+**Status:** Accepted
+**Date:** 2026-10-05
+
+### Context
+
+The API accepts authenticated writes that trigger the resolver, the
+frozen gate, and provider evidence fetches. Nothing bounded how often
+one identity could do that, and nothing distinguished an abuse
+pattern from normal use. `SECURITY.md` §7 already required rate
+limiting on high-cost endpoints; this stage implements it for the
+three operations that actually exist.
+
+### Decision
+
+1. Three operations are limited, no more: `POST /api/v1/observations`
+   (`observations.create`, default 30/60 s),
+   `POST /api/v1/observations/{id}/analyze` (`observations.analyze`,
+   20/60 s), and `POST /api/v1/reviews/{id}/decision`
+   (`reviews.decision`, 20/60 s). Reads and the reviewer claim route
+   are not limited.
+2. `RateLimiter` is a one-method protocol (`hit(key, limit, window)`)
+   so the backend can become Redis or database-backed without
+   touching routes or domain code. `InMemoryRateLimiter` is the only
+   implementation shipped here, with an injectable clock so tests
+   are deterministic.
+3. The bucket key is derived from the authenticated principal:
+   `"<action>|<verified subject>"`, optionally combined with the peer
+   address (`RATE_LIMIT_INCLUDE_IP`, default off because behind a
+   proxy the peer address is the proxy's). No header and no body
+   field can influence it.
+4. Windows are fixed and lazily expired; storage is bounded by
+   `RATE_LIMIT_MAX_KEYS` with least-recently-used eviction. A bounded
+   limiter degrades accuracy, never correctness.
+5. Denial is `429 RATE_LIMITED` in the standard error envelope with
+   a `Retry-After` header, emitted by the single `ApiError` handler
+   from `request.state.rate_limit_retry_after`, so every refusal
+   looks the same and discloses no bucket internals.
+6. If the limiter backend raises, the request is refused with `503
+   RATE_LIMITER_UNAVAILABLE` — fail closed. Degrading to "allow"
+   would disable the control exactly when the backend is unhealthy.
+7. Budgets are configuration-driven (`RATE_LIMIT_*`); no route
+   carries a hard-coded number, and `app.state.rate_limit_policy` is
+   an injection seam for tests. No new database table.
+8. The review-decision route passes `require_reviewer` into the
+   limiter dependency so the stricter role check runs before a bucket
+   is consumed.
+
+### Consequences
+
+- Abusive or accidental write floods are bounded per identity, and
+  the refusal is a standard, machine-readable response.
+- The limiter is per process: N replicas multiply the budget by N and
+  a restart clears all state. This is stated in the module
+  docstring, in `SECURITY.md`, and in the stage document rather than
+  left for someone to discover.
+- The abstraction is the same shape a shared backend will need, so
+  moving to Redis is a configuration and deployment change.
+- Fail-closed means an unhealthy limiter turns into 503s on those
+  three routes, which is visible in monitoring rather than silent.
+- Tests unrelated to rate limiting must inject a permissive policy
+  (done in `app/tests/api/helpers.py`) because the default limiter is
+  process-wide and would otherwise be exhausted by a whole suite.
+
+**Rejected alternatives:**
+- Keying buckets on a client-supplied user id: an attacker chooses
+  their own bucket.
+- Limiting reads as well: browsing becomes degraded by an abuse
+  control that exists for cost and write safety.
+- A 200 response with an error body: contradicts the API spec's
+  status strategy and hides refusal from clients and proxies.
+- Failing open on limiter errors: silently removes protection during
+  the incident it was added for.
+- Adding a rate-limit table to the database: not required by the
+  requirement, adds write contention to the paths being protected.

@@ -2549,3 +2549,111 @@ target tables land.
 # 78. Final Database Principle
 
 > **The LabelLens database must preserve what was observed, what was normalized, what was matched, what was verified, what was computed, what was inferred, who/what supports it, and what remains unknown—without collapsing those states into one convenient but untrustworthy record.**
+
+---
+
+# 77c. Stage-12 Additions: Canonical Entity Registration (2026-10-05)
+
+**No migration and no new table.** Stage 12 changed how
+`chemical_entities` and `ingredient_aliases` get populated, not what
+they hold. The columns the import needs already existed in
+`001_initial_schema.sql`; they are simply now written by a
+service-role path instead of by hand.
+
+## 77c.1 Provenance storage
+
+`chemical_entities.metadata JSONB` is the provenance document for a
+registered canonical entity. There is deliberately no separate
+provenance table: the data is per-entity, semi-structured, and read
+with the entity.
+
+```json
+{
+  "snapshot_version": "canonical_v1",
+  "rules_version": "1.0.0",
+  "verification_status": "verified",
+  "verified_at": "2026-10-05",
+  "imported_by": "canonical-registration-import",
+  "provenance": {
+    "source_id": "PUBCHEM",
+    "record_locator": "https://pubchem.ncbi.nlm.nih.gov/rest/pug/...",
+    "retrieved_at": "2026-10-05",
+    "source_class": "A",
+    "license_note": "…",
+    "source_version": "…"
+  },
+  "identifiers": [
+    {"id_type": "pubchem_cid", "value": "311", "provenance_note": "…"},
+    {"id_type": "inchikey", "value": "KRKNYBCHXYNGOX-UHFFFAOYSA-N"}
+  ]
+}
+```
+
+- `first_verified_at` / `last_verified_at TIMESTAMPTZ` record when the
+  entity was approved. Both are set on import.
+- Values are transcribed verbatim from the approved artifact. No
+  descriptor, weight, or structure is computed here; a field absent
+  from the source stays `NULL`.
+- `snapshot_version` plus `rules_version` answer "which approved
+  artifact, under which frozen rules, was this entity allowed in?" —
+  the same pair `verification_decisions` carries.
+
+## 77c.2 Registration invariants
+
+- **Approved records only.** `status = 'verified'`; `entity_type` and
+  `representation_type` come from the approved vocabulary (a salt
+  stays `salt`, a mixture stays a mixture; `chemical_class` is not
+  derived).
+- **Stable identity.** A UUID id is kept verbatim; any other stable id
+  maps to `uuid5("canonical-entity:<id>")`. Alias ids are `uuid5`
+  derived. Re-running an import cannot create a second identity.
+- **Idempotent writes.** Inserts use `ON CONFLICT DO NOTHING` (entity
+  by `id`, alias by `(chemical_entity_id, alias)`), so a repeat run
+  reports records as already present and writes nothing new.
+- **All-or-nothing.** Entity and alias writes share one transaction.
+  Validation of the whole artifact completes before any write; a
+  rejected write propagates, so a failed run leaves no partial state.
+- **Aliases carry no source.** `ingredient_aliases.source_id` stays
+  `NULL` and `verified = true`: an alias imported from an approved
+  record is not an independently sourced fact.
+- **No product, scan, or role data** is written or read by the
+  import. `products`, `product_scans`, and the deferred FK targets stay
+  as they are.
+
+## 77c.3 The import path is not a route
+
+`app/cli/import_canonical_entities.py` is the only writer. It requires
+direct service-role database credentials and an explicit
+`ENTITY_IMPORT_CONFIRM=service-role` interlock; there is no HTTP route,
+admin endpoint, or request body that can create an entity. The API
+continues to reject a decision naming an unregistered entity with 422
+`ENTITY_NOT_FOUND` before any write, so `claims.chemical_entity_id`
+remains referentially valid by construction.
+
+## 77c.4 Registry projection
+
+The resolver's registry is a read-only projection of these rows,
+built at application startup:
+
+```text
+chemical_entities + ingredient_aliases  ->  InMemoryRegistry
+```
+
+- `RegistryEntry.ref` is registry-local (`CANON-<12 hex>`), never the
+  entity UUID — `entity_matches.chemical_entity_id` therefore stays
+  `NULL` for a resolver match (Stage-5 invariant: a match is not an
+  entity identity).
+- Identifiers come from `metadata.identifiers`; `entity_class` comes
+  from `representation_type`.
+- A failed load leaves the registry empty (all candidates unresolved)
+  rather than partially populated.
+- Re-running the import reaches the resolver only after an application
+  restart; there is no reload endpoint.
+
+## 77c.5 Row-level security — still open
+
+`chemical_entities` and `ingredient_aliases` are **not** covered by
+the Stage-10 RLS rollout: they are canonical reference data, readable
+only with service-role credentials from this service. Enabling RLS on
+them is a Stage-13 candidate and is recorded here as a known gap, not
+an oversight.
