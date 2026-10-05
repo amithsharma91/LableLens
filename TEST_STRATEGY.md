@@ -763,3 +763,18 @@ false-positive count is asserted at exactly 0.
   real-label VERIFIED criterion is documented as not met
   (`STAGE_14_SYSTEMATIC_NAMES_AND_VERIFIED_PATH.md` §4) rather
   than simulated.
+### Stage-15 extension (2026-10-05)
+
+- Added `RL-15-01` (Simple Linctus Sugar Free, UK SmPC §6.1
+  excipients, primary regulatory text, draft): the first
+  identifier-bearing fixture whose names agree with the registry.
+  `Glycerol (E422)` and `Sodium Benzoate (E211)` verify through
+  the unchanged pipeline with all seven gates PASS (V5 confirms
+  `salt` for benzoate); the three unrelated nodes stay unknown.
+  Full gate/claim/evidence/provenance/idempotency coverage in
+  `app/tests/regression/test_verified_label.py` plus live
+  persistence in `test_real_label_postgres.py`.
+- Current slice metrics (62 ingredients): 7 exact matches, 2
+  candidates, 53 unresolved; 2 verified, 4 provisional, 1
+  unverified, 55 unknown, 0 conflicted, 0 false positives.
+  Research report: `STAGE_15_VERIFIED_LABEL_RESEARCH.md`.

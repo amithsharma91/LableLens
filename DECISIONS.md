@@ -1279,3 +1279,56 @@ Full analysis in
 - Adding PubChem live calls to manufacture a second record: the
   transcript IS PubChem; two records, one source, zero new
   corroboration.
+
+---
+
+## ADR-030 — First Real-Label Verified Path (Stage 15)
+
+**Status:** Accepted
+**Date:** 2026-10-05
+
+### Context
+
+Stage 14 proved identifier resolution but no real-label VERIFIED:
+function-names (Frooti) and Portuguese names (Brazil) cannot agree
+with the English registry under frozen V3, and labelling formats
+worldwide print a name or a code, rarely both. Research (recorded
+in `STAGE_15_VERIFIED_LABEL_RESEARCH.md`, rejected candidates
+included) found the productive source: UK SmPC excipient lists,
+which print `Name (EXXX)` for known-effect excipients.
+
+### Decision
+
+1. RL-15-01 (Simple Linctus Sugar Free, emc product 4928, MA
+   PL 12965/0050, SmPC revised 06/11/2020, draft): §6.1 excipient
+   enumeration transcribed verbatim. `Glycerol (E422)` and
+   `Sodium Benzoate (E211)` verify through the unchanged
+   pipeline — name agreement plus same-record identifier
+   belonging, all seven gates PASS, verified/HIGH claims with
+   evidence, persisted decision/claims/sources with a
+   reconstructable provenance chain.
+2. No waiver was involved and none was added: human confirmation
+   of a bare name yields provisional/MEDIUM at best (V4 UNKNOWN
+   blocks VERIFIED), and PubChem/transcript double-counting stays
+   rejected. The §2 active line (`Citric acid monohydrate
+   (E330)`) is out of scope: hydrate-qualified names match no
+   registry record, and only approved registrations extend it.
+3. The three unrelated nodes stay unresolved/unknown with null
+   entities; false positives remain 0; reruns are row-stable.
+
+### Consequences
+
+- The real-label VERIFIED path is proven end to end on regulated
+  label text with no rule change, no shortcut, and no override.
+- Future verified fixtures need the same shape the gate
+  demands: a registry-agreeing name plus a belonging identifier
+  on one observation, from a source that establishes the
+  name↔code relationship itself.
+
+**Rejected alternatives:**
+- Waiving V3/V4 for identifier-only or function-name matches:
+  contradicts the frozen dual-agreement rule.
+- Translating Portuguese names to manufacture agreement: hidden
+  machinery no reviewer approved.
+- Live-provider calls as a "second source": the transcript is
+  PubChem; one source counted twice.

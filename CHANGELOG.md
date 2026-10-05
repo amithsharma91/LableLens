@@ -180,6 +180,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   486/486 passing with live DB (442 passed + 44 skipped without);
   regression CLI passes. Documented in
   `STAGE_14_SYSTEMATIC_NAMES_AND_VERIFIED_PATH.md`; ADR-029.
+- Stage-15 first real-label VERIFIED path (V1–V7 untouched):
+  researched label sources exhaustively (report with rejected
+  candidates in `STAGE_15_VERIFIED_LABEL_RESEARCH.md`) and found
+  UK SmPC excipient lists, which print `Name (EXXX)`. New draft
+  fixture RL-15-01 (Simple Linctus Sugar Free, emc product 4928,
+  MA PL 12965/0050): `Glycerol (E422)` and `Sodium Benzoate
+  (E211)` verify through the unchanged pipeline with all seven
+  gates PASS, verified/HIGH entity-linked claims with evidence,
+  persisted decision/claims/sources, and full provenance — no
+  waiver, shortcut, or override involved; the three unrelated
+  nodes stay unknown. Tests: 14 new (13 verified-path, 1 live
+  persistence). 501/501 passing with live DB (456 passed + 45
+  skipped without); regression CLI passes. ADR-030.
 
 ### Fixed
 - `entity_matches.selected_at` and `claim_sources.retrieved_at`
