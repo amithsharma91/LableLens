@@ -642,3 +642,36 @@ status lives per claim row, never as entity-wide implication.
 - Option A (snapshot-only forever): goes stale on dynamic facts.
 - Option B (live-API-only): non-reproducible, rate-limited, untestable
   offline, unusable without network.
+
+---
+
+## ADR-020 — Verification Implementation Hardening (Stage 7)
+
+**Status:** Accepted  
+**Date:** 2026-10-05
+
+### Context
+
+Implementing ADR-019 exposed two cases the architecture left implicit:
+records curated under older gate rules, and identifier checks for
+non-molecular entities that legitimately carry no identifiers.
+
+### Decision
+
+1. A snapshot whose `verification_rule_version` differs from the running
+   gate can never yield `verified`: the orchestrator downgrades to
+   `provisional` with a `snapshot_rules_version_mismatch` warning.
+2. V4 passes vacuously only for non-molecular representations; molecular
+   entities without identifiers stay `UNKNOWN` (hence `provisional` at
+   best), preserving "UNKNOWN never counts as PASS".
+3. CAS checksum validity is an integrity signal only; belonging still
+   requires name+identifier dual agreement against the same record.
+
+### Consequences
+
+- Stage-8 live adapters inherit the same downgrade: version skew can
+  only ever reduce certainty, never preserve it silently.
+
+**Rejected alternatives:**
+- Auto-accepting older-rule snapshots with a warning only: warnings are
+  ignorable downstream; the status downgrade is enforced in the type.

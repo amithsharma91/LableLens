@@ -50,6 +50,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (Option C); frozen gate V1–V7; state machine with append-only
   transitions; claim-level entity/claim/source separation; conflict,
   freshness, provenance, and failure models; Stage-7 contract.
+- Stage-7 verification engine (`backend/app/services/verification/`,
+  rules v1.0.0): pure V1–V7 gate, `VerificationSource` ABC,
+  read-only `SnapshotAdapter`, unavailable-by-design `ManualAdapter`
+  stub, `verify_candidate()` orchestrator with frozen status mapping.
+  `snapshots/canonical_v1.json`: 4 PubChem-transcribed records
+  (citric acid, sodium benzoate, glycerol, ethanol) with per-field
+  provenance, quality over quantity. No live providers, RDKit, AI,
+  migrations, or endpoints. 113/113 passing.
 
 ### Fixed
 - Parser strips a leading `Ingredients:` label header (per `DATA_PIPELINE.md`
