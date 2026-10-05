@@ -31,7 +31,12 @@ from app.services.verification.models import (
     SourceRecord,
 )
 
-__all__ = ["SnapshotAdapter", "SnapshotError"]
+__all__ = [
+    "SnapshotAdapter",
+    "SnapshotError",
+    "ALLOWED_REPRESENTATIONS",
+    "ALLOWED_STATUSES",
+]
 
 SNAPSHOT_ADAPTER_VERSION = "1.0.0"
 
@@ -43,7 +48,7 @@ MAX_IDENTIFIERS = 50
 MAX_NAMES = 50
 MAX_FIELDS = 100
 
-_ALLOWED_REPRESENTATIONS = frozenset(
+ALLOWED_REPRESENTATIONS = frozenset(
     {
         "single_molecule",
         "salt",
@@ -57,7 +62,7 @@ _ALLOWED_REPRESENTATIONS = frozenset(
         "unknown",
     }
 )
-_ALLOWED_STATUSES = frozenset({"verified", "provisional"})
+ALLOWED_STATUSES = frozenset({"verified", "provisional"})
 
 
 class SnapshotError(ValueError):
@@ -112,6 +117,15 @@ class SnapshotAdapter(VerificationSource):
     def record_count(self) -> int:
         """Number of loaded canonical records."""
         return len(self._entities)
+
+    def canonical_entities(self) -> List[CanonicalEntity]:
+        """Parsed records in file order (read-only).
+
+        Used by the controlled registration import, which validates
+        the same parsed records the runtime evidence path uses instead
+        of re-parsing the artifact.
+        """
+        return list(self._entities)
 
     def _read_file(self) -> bytes:
         try:
@@ -169,10 +183,10 @@ class SnapshotAdapter(VerificationSource):
         representation = _check_str(
             item["representation_type"], what="representation"
         )
-        if representation not in _ALLOWED_REPRESENTATIONS:
+        if representation not in ALLOWED_REPRESENTATIONS:
             raise SnapshotError("%s bad representation" % what)
         status = _check_str(item["verification_status"], what="status")
-        if status not in _ALLOWED_STATUSES:
+        if status not in ALLOWED_STATUSES:
             raise SnapshotError("%s bad status %s" % (what, status))
         identifiers = self._load_identifiers(item.get("identifiers"), what)
         names = self._load_names(item.get("names"), what)

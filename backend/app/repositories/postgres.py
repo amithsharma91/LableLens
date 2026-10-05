@@ -276,6 +276,28 @@ _ENTITIES_TABLE = Table(
     Column("smiles", Text),
     Column("chemical_class", Text),
     Column("structure_status", Text),
+    # Provenance and verification timestamps live here: there is no
+    # separate provenance table, so the JSONB document is the record of
+    # why an entity was allowed to be registered.
+    Column("metadata", JSONB),
+    Column("molecular_weight_unit", Text),
+    Column("first_verified_at", TIMESTAMP(timezone=True)),
+    Column("last_verified_at", TIMESTAMP(timezone=True)),
+    extend_existing=True,
+)
+
+_ALIASES_TABLE = Table(
+    "ingredient_aliases", metadata,
+    _id(),
+    Column("chemical_entity_id", PG_UUID(as_uuid=False), nullable=False),
+    Column("alias", Text, nullable=False),
+    Column("alias_type", Text, nullable=False),
+    Column("language_code", Text),
+    Column("region_code", Text),
+    Column("source_id", PG_UUID(as_uuid=False)),
+    Column("verified", Boolean),
+    _ts("created_at"),
+    _ts("updated_at"),
     extend_existing=True,
 )
 
@@ -512,7 +534,13 @@ class PostgresEvidenceRepository(_Bound):
 
 
 class PostgresEntityRepository(_Bound):
-    """Canonical entity existence checks (Postgres, read-only)."""
+    """Canonical entities (Postgres).
+
+    Reads serve the API; writes exist only for the controlled
+    registration import and require the service role. Insertion is
+    idempotent by primary key so re-running an import cannot create a
+    second canonical entity.
+    """
 
     async def get_entity(
         self,
@@ -529,6 +557,41 @@ class PostgresEntityRepository(_Bound):
         if row is None:
             raise KeyError(entity_id)
         return _row(row)
+
+    async def save_entity(
+        self, row: dict, *, role: str = SERVICE_ROLE
+    ) -> str:
+        _require_write(role)
+        stmt = insert(_ENTITIES_TABLE).values(**row)
+        stmt = stmt.on_conflict_do_nothing(index_elements=["id"])
+        await self._conn.execute(stmt)
+        return str(row["id"])
+
+    async def save_alias(
+        self, row: dict, *, role: str = SERVICE_ROLE
+    ) -> str:
+        _require_write(role)
+        stmt = insert(_ALIASES_TABLE).values(**row)
+        stmt = stmt.on_conflict_do_nothing(
+            index_elements=["chemical_entity_id", "alias"])
+        await self._conn.execute(stmt)
+        return str(row["id"])
+
+    async def list_entities(
+        self, *, role: str = AUTHENTICATED_ROLE
+    ) -> list:
+        _require_read(role)
+        result = await self._conn.execute(
+            select(_ENTITIES_TABLE).order_by(_ENTITIES_TABLE.c.id))
+        return [_row(row) for row in result.all()]
+
+    async def list_aliases(
+        self, *, role: str = AUTHENTICATED_ROLE
+    ) -> list:
+        _require_read(role)
+        result = await self._conn.execute(
+            select(_ALIASES_TABLE).order_by(_ALIASES_TABLE.c.id))
+        return [_row(row) for row in result.all()]
 
 
 class PostgresVerificationRepository(_Bound):

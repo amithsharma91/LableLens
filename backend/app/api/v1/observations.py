@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Request
 from app.api.auth import Principal, require_authenticated
 from app.api.dependencies import observation_service
 from app.api.errors import ERROR_RESPONSES, ApiError
+from app.api.limits import limited
 from app.schemas.common import (
     CollectionMeta,
     MetaResponse,
@@ -32,6 +33,7 @@ from app.schemas.verification import (
     SelectedCandidateResponse,
 )
 from app.services import errors as _service_errors
+from app.services.rate_limit import RateLimitAction
 
 router = APIRouter()
 
@@ -69,13 +71,16 @@ def _service(request: Request):
         400: ERROR_RESPONSES[400],
         401: ERROR_RESPONSES[401],
         422: ERROR_RESPONSES[422],
+        429: ERROR_RESPONSES[429],
         500: ERROR_RESPONSES[500],
     },
 )
 async def create_observation(
     payload: CreateObservationRequest,
     request: Request,
-    principal: Principal = Depends(require_authenticated),
+    principal: Principal = Depends(
+        limited(RateLimitAction.OBSERVATION_CREATE)
+    ),
 ):
     """Parse raw text; persist one observation per top-level node."""
     service = _service(request)
@@ -157,13 +162,16 @@ async def get_observation(
         401: ERROR_RESPONSES[401],
         404: ERROR_RESPONSES[404],
         422: ERROR_RESPONSES[422],
+        429: ERROR_RESPONSES[429],
         500: ERROR_RESPONSES[500],
     },
 )
 async def analyze_observation(
     observation_id: uuid.UUID,
     request: Request,
-    principal: Principal = Depends(require_authenticated),
+    principal: Principal = Depends(
+        limited(RateLimitAction.OBSERVATION_ANALYZE)
+    ),
 ):
     """Run resolve + verify + persist (+ review routing)."""
     service = _service(request)

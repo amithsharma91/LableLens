@@ -31,6 +31,7 @@ from app.tests.api.helpers import (
     REVIEWER1,
     REVIEWER2,
     SNAPSHOT_PATH,
+    PermissivePolicy,
     auth,
     envelope,
     verifier,
@@ -186,6 +187,9 @@ def client():
         registry=registry,
         adapters=[SnapshotAdapter(str(SNAPSHOT_PATH))],
     )
+    # Budgets are exercised in test_api_rate_limit / test_production_flow;
+    # here they would only interfere with the flow under test.
+    application.state.rate_limit_policy = PermissivePolicy()
     with TestClient(application) as built:
         yield built
     _await(engine.dispose())

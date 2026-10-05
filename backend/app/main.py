@@ -10,6 +10,7 @@ below know how those bundles are built.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -36,18 +37,11 @@ def _default_snapshot_path() -> str:
     return str(candidate) if candidate.exists() else ""
 
 
-def _dev_verifier():
-    from app.api.auth import StaticTokenVerifier
+def _configured_verifier():
+    """Configured verifier; production fails closed at construction."""
+    from app.api.auth import build_token_verifier
 
-    mapping = {}
-    for entry in settings.dev_api_tokens.split(","):
-        parts = [p.strip() for p in entry.split(":")]
-        if len(parts) == 3 and all(parts):
-            token, subject, role = parts
-            mapping[token] = (subject, role)
-    if not mapping:
-        return None
-    return StaticTokenVerifier(mapping)
+    return build_token_verifier(settings)
 
 
 class ServiceScopeMiddleware(BaseHTTPMiddleware):
@@ -82,6 +76,54 @@ def _shared_factory(bundle):
     return scope
 
 
+class _RegistryHolder:
+    """Late-bound resolver registry (loaded at startup when needed)."""
+
+    def __init__(self, registry=None) -> None:
+        self._registry = registry
+
+    @property
+    def registry(self):
+        return self._registry
+
+    def set(self, registry) -> None:
+        self._registry = registry
+
+
+async def _load_pg_registry(engine):
+    """Project registered canonical entities into a registry.
+
+    On any failure the registry stays empty: unresolved candidates are
+    the safe state, whereas a partial load could make a name resolvable
+    without a matching canonical entity.
+    """
+    from app.repositories.postgres import PostgresEntityRepository
+    from app.services.registration import build_registry
+
+    log = logging.getLogger("labellens.registry")
+    connection = await engine.connect()
+    try:
+        entities = await PostgresEntityRepository(
+            connection).list_entities(role="service")
+        aliases = await PostgresEntityRepository(
+            connection).list_aliases(role="service")
+    except Exception as exc:
+        log.error(
+            "canonical registry unavailable; resolver stays empty "
+            "category=%s",
+            type(exc).__name__,
+        )
+        return None
+    finally:
+        await connection.close()
+    projected = build_registry(entities, aliases, version=str(len(entities)))
+    log.info(
+        "canonical registry loaded entities=%d aliases=%d",
+        len(entities), len(aliases),
+    )
+    return projected
+
+
 def _postgres_factory(engine, registry, adapters):
     """Per-request connection + transaction scope (Postgres wiring)."""
     from contextlib import asynccontextmanager
@@ -111,12 +153,38 @@ def _postgres_factory(engine, registry, adapters):
                     repos, adapters=list(adapters))
                 yield SimpleNamespace(
                     observations=ObservationService(
-                        repos, registry=registry, adapters=list(adapters),
+                        repos, registry=registry.registry,
+                        adapters=list(adapters),
                         review_service=built_reviews),
                     reviews=built_reviews,
                 )
 
     return scope
+
+
+def _registry_lifespan(engine, registry):
+    """Startup hook: project registered canonical entities (Postgres).
+
+    With a Postgres engine the resolver registry is built from
+    `chemical_entities` + `ingredient_aliases`, the single
+    authoritative registration path. On failure the registry stays
+    empty: unresolved candidates are the safe state, whereas a partial
+    load could make a name resolvable without a matching canonical
+    entity.
+    """
+    from contextlib import asynccontextmanager
+
+    from app.services.registration import empty_registry
+
+    @asynccontextmanager
+    async def lifespan(application):
+        if isinstance(registry, _RegistryHolder) and engine is not None:
+            if registry.registry is None:
+                loaded = await _load_pg_registry(engine)
+                registry.set(loaded if loaded is not None else empty_registry())
+        yield
+
+    return lifespan
 
 
 def create_app(
@@ -128,9 +196,26 @@ def create_app(
     review_service=None,
     observation_service=None,
     engine=None,
+    rate_limiter=None,
 ) -> FastAPI:
-    """Build the FastAPI application with injected boundaries."""
-    application = FastAPI(title="LabelLens API", version=settings.version)
+    """Build the FastAPI application with injected boundaries.
+
+    `registry` is the resolver's canonical-entity registry. With a
+    Postgres engine it is loaded from `chemical_entities` at startup
+    (the one authoritative registration path); if that load fails the
+    registry stays empty, which resolves nothing rather than
+    inventing candidates. A re-run of the import requires a restart
+    to become visible to the resolver.
+    """
+    # One holder shared by the startup hook and the request factory, so
+    # the registry loaded at startup is the one every request sees.
+    if engine is not None and not isinstance(registry, _RegistryHolder):
+        registry = _RegistryHolder(registry)
+    application = FastAPI(
+        title="LabelLens API",
+        version=settings.version,
+        lifespan=_registry_lifespan(engine, registry),
+    )
 
     # Middleware order (last added is outermost):
     #   RequestId -> CORS -> ServiceScope -> routes
@@ -154,7 +239,9 @@ def create_app(
     register_handlers(application)
 
     application.state.token_verifier = (
-        verifier if verifier is not None else _dev_verifier())
+        verifier if verifier is not None else _configured_verifier())
+    if rate_limiter is not None:
+        application.state.rate_limiter = rate_limiter
 
     if repos is not None or engine is not None:
         from app.services.verification.adapters.snapshot import (

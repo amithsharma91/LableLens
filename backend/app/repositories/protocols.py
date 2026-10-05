@@ -205,3 +205,27 @@ class EntityRepository(Protocol):
         role: str = AUTHENTICATED_ROLE,
     ) -> dict:
         """Return one chemical_entities row by id."""
+
+    async def save_entity(
+        self, row: dict, *, role: str = SERVICE_ROLE
+    ) -> str:
+        """Insert one canonical entity (service role; import path).
+
+        Idempotent by primary key: re-importing an already registered
+        entity must not create a second row.
+        """
+
+    async def save_alias(
+        self, row: dict, *, role: str = SERVICE_ROLE
+    ) -> str:
+        """Insert one ingredient_aliases row (service role; import)."""
+
+    async def list_entities(
+        self, *, role: str = AUTHENTICATED_ROLE
+    ) -> list:
+        """All canonical entities ordered by id (registry projection)."""
+
+    async def list_aliases(
+        self, *, role: str = AUTHENTICATED_ROLE
+    ) -> list:
+        """All alias rows ordered by id (registry projection)."""

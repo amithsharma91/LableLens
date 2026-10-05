@@ -270,6 +270,35 @@ class MemoryEntityRepository:
         """Seed a canonical entity row (test/registry bootstrap only)."""
         return self._store.insert("chemical_entities", row)
 
+    async def save_entity(
+        self, row: dict, *, role: str = SERVICE_ROLE
+    ) -> str:
+        _require_write(role)
+        return self._store.insert("chemical_entities", row)
+
+    async def save_alias(
+        self, row: dict, *, role: str = SERVICE_ROLE
+    ) -> str:
+        _require_write(role)
+        parent = row["chemical_entity_id"]
+        if parent not in self._store.table("chemical_entities"):
+            raise ValueError("canonical entity %s missing" % parent)
+        return self._store.insert("ingredient_aliases", row)
+
+    async def list_entities(
+        self, *, role: str = AUTHENTICATED_ROLE
+    ) -> list:
+        _require_read(role)
+        rows = self._store.table("chemical_entities")
+        return [copy.deepcopy(rows[key]) for key in sorted(rows)]
+
+    async def list_aliases(
+        self, *, role: str = AUTHENTICATED_ROLE
+    ) -> list:
+        _require_read(role)
+        rows = self._store.table("ingredient_aliases")
+        return [copy.deepcopy(rows[key]) for key in sorted(rows)]
+
 
 class MemoryVerificationRepository:
     """Decisions plus claim-level event log (memory)."""

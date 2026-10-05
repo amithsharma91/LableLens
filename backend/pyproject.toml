@@ -19,5 +19,7 @@ dependencies = [
     "greenlet",
     "pytest",
     "pytest-asyncio",
-    "httpx"
+    "httpx",
+    # Supabase asymmetric JWT verification (JWKS signature validation).
+    "pyjwt[crypto]"
 ]

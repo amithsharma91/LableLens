@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from app.api.auth import Principal, require_authenticated, require_reviewer
 from app.api.dependencies import review_service
 from app.api.errors import ERROR_RESPONSES, ApiError
+from app.api.limits import limited
 from app.schemas.common import (
     CollectionMeta,
     MetaResponse,
@@ -25,6 +26,7 @@ from app.schemas.reviews import (
     ReviewSummaryResponse,
 )
 from app.services import errors as _service_errors
+from app.services.rate_limit import RateLimitAction
 
 router = APIRouter()
 
@@ -175,6 +177,7 @@ async def claim_review(
         404: ERROR_RESPONSES[404],
         409: ERROR_RESPONSES[409],
         422: ERROR_RESPONSES[422],
+        429: ERROR_RESPONSES[429],
         500: ERROR_RESPONSES[500],
     },
 )
@@ -182,7 +185,9 @@ async def record_decision(
     review_id: str,
     payload: DecisionRequest,
     request: Request,
-    principal: Principal = Depends(require_reviewer),
+    principal: Principal = Depends(
+        limited(RateLimitAction.REVIEW_DECISION, require=require_reviewer)
+    ),
 ):
     """Validated by Stage-9 rules; confirmations re-verify via V1-V7."""
     service = _services(request)

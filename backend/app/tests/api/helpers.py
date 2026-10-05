@@ -87,6 +87,19 @@ def register_snapshot_entities(uow):
     return uow
 
 
+class PermissivePolicy:
+    """Rate-limit policy that never bites, for tests about other things.
+
+    The default limiter is process-wide, so a suite that exercises the
+    production budgets would otherwise exhaust the shared bucket for
+    every later test. Tests that assert 429 behaviour inject their own
+    limiter *and* their own policy (see `test_api_rate_limit`).
+    """
+
+    def for_action(self, action: str) -> str:
+        return "10000/60"
+
+
 def make_app(registry_override=None, adapters_override=None):
     """Production factory with test doubles at every boundary."""
     uow = register_snapshot_entities(MemoryUnitOfWork())
@@ -101,6 +114,7 @@ def make_app(registry_override=None, adapters_override=None):
         if registry_override is not None else registry(),
         adapters=adapters,
     )
+    application.state.rate_limit_policy = PermissivePolicy()
     return TestClient(application), uow
 
 

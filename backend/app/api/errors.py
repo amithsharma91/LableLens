@@ -103,7 +103,8 @@ def register_handlers(app: FastAPI) -> None:
     @app.exception_handler(StarletteHTTPException)
     async def http_handler(request: Request, exc: StarletteHTTPException):
         codes = {401: "UNAUTHORIZED", 403: "FORBIDDEN",
-                 404: "NOT_FOUND", 429: "RATE_LIMITED"}
+                 404: "NOT_FOUND", 429: "RATE_LIMITED",
+                 503: "SERVICE_UNAVAILABLE"}
         code = codes.get(exc.status_code, "INTERNAL_ERROR")
         status = exc.status_code if exc.status_code < 500 else 500
         _log_outcome(request, status, code)
@@ -115,10 +116,15 @@ def register_handlers(app: FastAPI) -> None:
     @app.exception_handler(ApiError)
     async def api_handler(request: Request, exc: ApiError):
         _log_outcome(request, exc.status, exc.code)
+        headers = None
+        retry_after = getattr(request.state, "rate_limit_retry_after", None)
+        if exc.status == 429 and retry_after:
+            headers = {"Retry-After": str(int(retry_after))}
         return JSONResponse(
             status_code=exc.status,
             content=error_body(
                 request, exc.status, exc.code, exc.message, exc.details),
+            headers=headers,
         )
 
     @app.exception_handler(Exception)
@@ -150,5 +156,7 @@ ERROR_RESPONSES = {
     404: {"description": "Not found", "model": ErrorResponse},
     409: {"description": "Conflict", "model": ErrorResponse},
     422: {"description": "Validation error", "model": ErrorResponse},
+    429: {"description": "Rate limited", "model": ErrorResponse},
     500: {"description": "Internal error", "model": ErrorResponse},
+    503: {"description": "Dependency unavailable", "model": ErrorResponse},
 }

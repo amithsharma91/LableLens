@@ -36,6 +36,7 @@ __all__ = [
     "normalization_row",
     "candidate_rows",
     "match_row",
+    "timestamp_value",
 ]
 
 _SECRET_KEY_RE = re.compile(
@@ -244,7 +245,7 @@ def claim_from_row(row: dict) -> dict:
     }
 
 
-def _timestamp(value: object) -> Optional[datetime.datetime]:
+def timestamp_value(value: object) -> Optional[datetime.datetime]:
     """Coerce evidence timestamps to datetimes for TIMESTAMPTZ binds.
 
     asyncpg binds timestamp parameters strictly and rejects strings, so
@@ -291,7 +292,7 @@ def claim_source_row(
         "review_notes": None,
         "provider": getattr(evidence, "provider", ""),
         "source_version": getattr(evidence, "source_version", "") or None,
-        "retrieved_at": _timestamp(retrieved),
+        "retrieved_at": timestamp_value(retrieved),
         "response_hash": response_hash,
     }
 
