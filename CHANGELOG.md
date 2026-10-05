@@ -193,6 +193,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   nodes stay unknown. Tests: 14 new (13 verified-path, 1 live
   persistence). 501/501 passing with live DB (456 passed + 45
   skipped without); regression CLI passes. ADR-030.
+- Stage-16 deterministic OCR boundary (V1–V7 untouched): typed
+  immutable OCRResult plus a provider-independent protocol with a
+  deterministic fake (no vendor SDK, secret, or binding); migration
+  004 (`ocr_runs` append-only, single-revision `ocr_corrections`,
+  003-style RLS); OCRService orchestration reusing the observation
+  path (corrected-or-raw text, deterministic run-keyed observation
+  ids, warning outcomes instead of crashes); four minimal routes
+  (`POST|GET /ocr/runs`, `/correction`, `/analyze`) behind existing
+  auth/envelopes and the observation rate-limit budgets. Corrupted
+  OCR resolves to nothing or honestly unverified candidates (never
+  repaired, never verified); documented human correction restores
+  exactly the pre-corruption outcome, including the Stage-15
+  VERIFIED cases. Tests: 56 new (32 unit, 12 API, 5 regression, 6
+  live, +1 migration). 557/557 passing with live DB (506 passed +
+  51 skipped without). Documented in `STAGE_16_OCR_BOUNDARY.md`;
+  ADR-031.
 
 ### Fixed
 - `entity_matches.selected_at` and `claim_sources.retrieved_at`

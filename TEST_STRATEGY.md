@@ -778,3 +778,26 @@ false-positive count is asserted at exactly 0.
   candidates, 53 unresolved; 2 verified, 4 provisional, 1
   unverified, 55 unknown, 0 conflicted, 0 false positives.
   Research report: `STAGE_15_VERIFIED_LABEL_RESEARCH.md`.
+
+### Stage-16 extension (2026-10-05)
+
+- OCR boundary tests: `app/tests/unit/test_ocr.py` (result
+  contract, immutability, provider success/failure, run
+  persistence, correction boundary + refusals, all ten failure
+  modes, confidence separation both directions, chain
+  OCR→parser→normalizer→resolver, corrupted/corrected identifier
+  behavior, idempotency, provider independence),
+  `app/tests/api/test_api_ocr.py` (auth, envelopes, all four
+  routes, correction identity, provider 422/503 mapping, shared
+  observation rate-limit budgets with own limiter isolation),
+  `app/tests/regression/test_ocr_regression.py` (synthetic OCR
+  corruption derived from RL-14-01/RL-13-03/RL-13-02/RL-15-01
+  without altering fixture truth; correction restores exactly
+  the pre-corruption outcome including VERIFIED),
+  `app/tests/integration/test_ocr_postgres.py` (migration 004,
+  run/correction persistence, provider-failure atomicity,
+  OCR→verified end to end, corrected-run promotion, rerun
+  stability with teardown isolation).
+- Failure-mode gate: no test may assert a verified outcome from
+  corrupted text; partial name/code agreement must remain
+  unverified or unknown.

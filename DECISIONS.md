@@ -1332,3 +1332,72 @@ which print `Name (EXXX)` for known-effect excipients.
   machinery no reviewer approved.
 - Live-provider calls as a "second source": the transcript is
   PubChem; one source counted twice.
+
+---
+
+## ADR-031 — OCR Boundary Without Verified-Data Contamination (Stage 16)
+
+**Status:** Accepted
+**Date:** 2026-10-05
+
+### Context
+
+Stages 13–15 proved the trust pipeline on transcribed label text,
+but nothing modeled where that text comes from. OCR is the largest
+contamination risk in the architecture: a misread character must
+never become a verified fact, and OCR confidence must never become
+chemical confidence. Full analysis in
+`STAGE_16_OCR_BOUNDARY.md`.
+
+### Decision
+
+1. OCR is a provenance-carrying transcription layer, not an
+   intelligence layer: `OCRResult` holds document reference,
+   provider label, raw text, transcription confidence, and page
+   metadata — no normalized identity, no entity, no chemistry,
+   no evidence, by construction.
+2. Runs are immutable and append-only (`ocr_runs`,
+   `ocr_corrections`, migration 004); reruns insert new rows;
+   corrections are single-revision with reason and
+   `human:{subject}` actor; observing a corrected run derives new
+   observations while raw-derived ones stay intact.
+3. The provider is a one-method injected protocol; only a
+   deterministic fake ships. No vendor SDK, secret, or binding
+   in production code. Provider failures persist nothing and map
+   to 503.
+4. No repair logic anywhere in the pipeline: corrupted names or
+   codes resolve to nothing or to honestly unverified candidates
+   (partial agreement is not agreement); only a documented human
+   correction restores behavior, and it restores exactly the
+   pre-corruption outcome.
+5. Four minimal routes (ingest/read/correct/analyze) behind
+   existing auth, envelopes, and observation rate-limit budgets;
+   OCR responses carry no chemistry beyond status and identity
+   confidence.
+6. RLS mirrors migration 003; per-user ownership remains absent
+   schema-wide and is documented as a gap, not introduced as an
+   insecure shortcut.
+
+### Consequences
+
+- OCR enters the pipeline without touching V1–V7, the parser,
+  the resolver, or the registry; Stage-15 VERIFIED cases stay
+  VERIFIED and false positives stay 0.
+- Wiring a real vendor is an implementation of one protocol
+  method plus configuration — no architectural change.
+- The next hard problems (vendor selection, image handling,
+  per-user scoping) are unchanged in shape and still open.
+
+**Rejected alternatives:**
+- Chemistry-aware OCR repair ("close enough" matching): silent
+  fabrication at the noisiest layer of the system.
+- Mapping OCR confidence to identity confidence: two unrelated
+  uncertainties with different meanings and different owners.
+- Storing normalized entities on the OCR record: collapses the
+  observation/identity layers the architecture exists to keep
+  apart.
+- A vendor-bound implementation (Tesseract/Vision SDK in core):
+  couples the domain to an unapproved dependency and its
+  credentials.
+- Generic blob/image storage: unjustified — document ids are
+  opaque references and no image bytes are needed.

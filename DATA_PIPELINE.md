@@ -96,6 +96,19 @@ Convert a label image into machine-readable text.
 - Do not infer missing characters or words.
 - Do not proceed silently past `poor` or `unusable` confidence.
 
+### Stage-16 implementation note (2026-10-05)
+Stage 1 is implemented as immutable `ocr_runs` rows plus the
+`OCRProvider` protocol and `OCRService` orchestration (migration
+004; `STAGE_16_OCR_BOUNDARY.md`). The record carries document
+reference, provider label/version, raw text, numeric transcription
+confidence, page metadata, and source reference -- no normalized
+identity, no chemistry, no evidence. No image bytes are stored.
+Corrections live in `ocr_corrections` (one revision per run);
+observation derivation uses corrected-or-raw text with run-keyed
+stable ids. Empty or ingredient-free text analyzes to a warning
+outcome, never a crash or an entity. Quality-gate surfacing is
+the `warnings` array on observe/analyze responses.
+
 ---
 
 ## Stage 2 — Ingredient Extraction
