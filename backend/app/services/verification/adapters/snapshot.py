@@ -87,6 +87,7 @@ class SnapshotAdapter(VerificationSource):
     adapter_version = SNAPSHOT_ADAPTER_VERSION
 
     def __init__(self, path: Union[str, Path]) -> None:
+        super().__init__()
         self._path = Path(path)
         raw = self._read_file()
         data = self._parse_json(raw)

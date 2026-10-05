@@ -25,6 +25,9 @@ class VerificationSource(ABC):
     snapshot_version: str = ""
     available: bool = True
 
+    def __init__(self) -> None:
+        self._notices: list = []
+
     @abstractmethod
     def lookup_identity(
         self, resolution: Resolution
@@ -35,3 +38,15 @@ class VerificationSource(ABC):
         record asserts nothing about identity. Never raises on
         untrusted input; unknown input yields an empty list.
         """
+
+    def _note(self, message: str) -> None:
+        """Record a non-fatal operational notice for the caller."""
+        if not hasattr(self, "_notices"):
+            self._notices = []
+        self._notices.append(message)
+
+    def drain_notices(self) -> List[str]:
+        """Collect and clear pending notices (e.g. timeouts)."""
+        notices = list(getattr(self, "_notices", []))
+        self._notices = []
+        return notices

@@ -34,6 +34,7 @@ from typing import List, Optional, Sequence, Tuple
 
 from app.services.entity_resolver import Resolution
 from app.services.verification.adapters.base import VerificationSource
+from app.services.verification.evidence import detect_conflicts
 from app.services.verification.gate import (
     VERIFICATION_RULES_VERSION,
     FAIL,
@@ -112,6 +113,11 @@ def verify_candidate(
     """Verify one Stage-5 resolution against an adapter's records."""
     records = adapter.lookup_identity(resolution) or []
     admissible = filter_admissible(records)
+    warnings: List[str] = list(resolution.warnings)
+    drain = getattr(adapter, "drain_notices", None)
+    if callable(drain):
+        warnings.extend(drain())
+    field_conflicts = detect_conflicts(admissible)
     key_candidates = [resolution.selected_candidate] + list(
         resolution.candidates
     )
@@ -134,7 +140,10 @@ def verify_candidate(
     )
     by_rule = _details(results)
     reason = _join_reasons(results)
-    warnings: List[str] = list(resolution.warnings)
+    if field_conflicts:
+        reason += "; provider field conflict on " + ", ".join(
+            sorted({c.field for c in field_conflicts})
+        )
     if getattr(adapter, "snapshot_version", "") and (
         getattr(adapter, "rules_version", None)
         not in (None, VERIFICATION_RULES_VERSION)
@@ -174,6 +183,16 @@ def verify_candidate(
             rules_version=VERIFICATION_RULES_VERSION,
             snapshot_version=getattr(adapter, "snapshot_version", ""),
             entity_id=entity_id,
+        )
+
+    if field_conflicts:
+        # Providers disagree on identity-adjacent fields. Disagreement
+        # trumps any passing gate: surfacing conflicted is the only
+        # honest outcome (Stage-6 conflict case 6).
+        return decide(
+            STATUS_CONFLICTED,
+            CONF_CONFLICTED,
+            "provider field disagreement",
         )
 
     if all(g.result == PASS for g in results):
