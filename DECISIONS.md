@@ -768,3 +768,46 @@ become a backdoor to `verified`. Full analysis in
   unverifiable truth by keystroke.
 - Fuzzy evidence-similarity for staleness: only byte-identical
   material context reuses an approval.
+
+---
+
+## ADR-023 — Persistence Without Redesign (Stage 10)
+
+**Status:** Accepted
+**Date:** 2026-10-05
+
+### Context
+
+Stage 10 needed claim/review/decision tables, some spec-defined and
+some (decisions, reviews, review events) required by the stage gates
+but absent from `DATABASE_SCHEMA.md`. Full analysis in
+`STAGE_10_PERSISTENCE.md`.
+
+### Decision
+
+1. Spec tables implemented verbatim plus documented nullable
+   extensions only (freshness columns on `claims`, provenance
+   columns on `claim_sources`); alternatives stay in
+   `ingredient_candidates`, never as new columns.
+2. Missing-table FK targets stay plain UUIDs with activation comments
+   rather than stub tables or dropped columns.
+3. The never-applied invalid UUID literals in `002_seed_data.sql`
+   were corrected in place (no applied state rewritten); `003`
+   re-seeds idempotently regardless.
+4. Writes are service-role-only in code and RLS; reads are
+   authenticated-only on audit tables; events are trigger-immutable.
+   Per-user RLS waits for user_id (auth stage). No production-readiness
+   claim until a Supabase-project review happens.
+
+### Consequences
+
+- Future persistence (products, scans, auth) adds tables/columns and
+  activates deferred FKs; no existing table is reshaped.
+- `greenlet` joins backend dependencies (SQLAlchemy asyncio
+  requirement), pinned in `pyproject.toml`.
+
+**Rejected alternatives:**
+- One wide `ingredients` table: destroys claim-level states.
+- Storing raw provider payloads: unbounded growth and PII/secret
+  risk; hashes + locators + extracted evidence instead.
+- Rewriting 001/002 history: unnecessary; additive repair only.

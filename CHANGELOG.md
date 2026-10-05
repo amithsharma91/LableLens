@@ -74,6 +74,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   back through the frozen gate with stale-evidence rejection, plus a
   documentation-based PubChem/ChEBI production-readiness audit
   (quotas unknown, no credentials required). 206/206 passing.
+- Stage-10 persistence boundary (V1–V7 untouched): additive
+  migration `003_verification_review.sql` (claim/evidence/review/
+  decision tables, RLS, append-only triggers, idempotent seed repair
+  for a pre-existing invalid-UUID bug in `002`), repository
+  Protocols with in-memory and Postgres/Supabase implementations,
+  deterministic serialization, `backend/.env.example` placeholders.
+  Live-validated against real Postgres 18. 247/247 passing.
 
 ### Fixed
 - Parser strips a leading `Ingredients:` label header (per `DATA_PIPELINE.md`

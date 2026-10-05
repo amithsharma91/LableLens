@@ -2481,6 +2481,71 @@ Then evaluate whether V2 tables are actually needed.
 
 ---
 
+# 77b. Stage-10 Additions (additive, 2026-10-05)
+
+Implemented in `003_verification_review.sql`; specified by the
+verification/human-review architecture where the schema was silent:
+
+```text
+verification_decisions
+----------------------
+id UUID PK (deterministic, app-supplied)
+entity_match_id UUID NULL FK → entity_matches.id
+candidate_key TEXT NOT NULL
+status TEXT NOT NULL (verified/provisional/conflicted/unverified/unknown/obsolete)
+identity_confidence TEXT NOT NULL
+rules_version TEXT NOT NULL
+snapshot_version TEXT NOT NULL
+evidence_context_hash TEXT NOT NULL
+reason TEXT NULL
+warnings JSONB NULL
+gate_results JSONB NULL
+created_at TIMESTAMPTZ
+```
+
+```text
+reviews
+-------
+id TEXT PK (deterministic REV-####)
+candidate_key TEXT NOT NULL
+raw_text / normalized_text / identifier
+resolution JSONB NOT NULL
+verification_status TEXT NOT NULL
+evidence_context JSONB NOT NULL
+evidence_hash TEXT NOT NULL
+priority INTEGER NOT NULL
+status TEXT NOT NULL (queued/in_review/approved/rejected/needs_more_evidence/closed_unknown)
+reviewer TEXT NULL
+created_at / updated_at TIMESTAMPTZ
+```
+
+```text
+review_events
+-------------
+id TEXT PK (deterministic REV-####:###)
+review_id TEXT NOT NULL FK → reviews.id
+event_type TEXT NOT NULL (ReviewCreated/ReviewClaimed/ReviewDecisionRecorded/ReverificationTriggered/VerificationResultRecorded)
+actor TEXT NOT NULL
+reason TEXT NOT NULL
+previous_state TEXT NULL
+new_state TEXT NOT NULL
+evidence_context_hash TEXT NOT NULL
+rules_version TEXT NOT NULL
+snapshot_version TEXT NOT NULL
+created_at TIMESTAMPTZ (no updated_at: immutable, trigger-enforced)
+```
+
+Documented extensions: `claims` gains nullable
+`source_version/freshness_class/last_checked_at`;
+`claim_sources` gains nullable
+`provider/source_version/retrieved_at/response_hash`;
+`sources.name` gains UNIQUE (idempotent seeding). Deferred FKs
+(`claims.product_id/product_label_id/entity_role_id`,
+`observations.scan_id/ocr_run_id`) stay plain UUIDs until their
+target tables land.
+
+---
+
 # 78. Final Database Principle
 
 > **The LabelLens database must preserve what was observed, what was normalized, what was matched, what was verified, what was computed, what was inferred, who/what supports it, and what remains unknown—without collapsing those states into one convenient but untrustworthy record.**
