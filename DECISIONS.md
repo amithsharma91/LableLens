@@ -725,3 +725,46 @@ frozen V1–V7 gate as the sole decider.
   from field/identifier overlap.
 - Canonicalizing SMILES for comparison without cheminformatics:
   would invent chemistry comparison the project cannot defend.
+
+---
+
+## ADR-022 — Human Review Routes Through the Gate (Stage 9)
+
+**Status:** Accepted
+**Date:** 2026-10-05
+
+### Context
+
+Provisional/conflicted/unknown outcomes need a human path that cannot
+become a backdoor to `verified`. Full analysis in
+`STAGE_9_HUMAN_REVIEW.md`.
+
+### Decision
+
+1. Review lifecycle (queued/in_review/approved/rejected/
+   needs_more_evidence/closed_unknown) is separate from verification
+   status; approvals are identity-only and reasoned, with AI
+   identities rejected.
+2. `ManualAdapter` holds selections but returns zero source records:
+   human judgment is not evidence and is never fabricated into any.
+3. `reverify_candidate` validates selection scope, candidate
+   membership, and evidence-hash freshness, then runs the unchanged
+   gate with disambiguation enabled. Name changes are rejected by key
+   mismatch (re-resolution required, not verification).
+4. Production readiness (docs audit): neither provider requires
+   credentials; official quota numbers are UNKNOWN (not scraped from
+   third parties); client spacing stays conservative and is never
+   presented as provider quota.
+
+### Consequences
+
+- Any future review UI or persistence writes through these same
+  transitions; direct status mutation has no code path.
+- First live provider use still requires quota confirmation against
+  current official docs plus an egress review.
+
+**Rejected alternatives:**
+- Human "approve" buttons writing `verified` directly: creates
+  unverifiable truth by keystroke.
+- Fuzzy evidence-similarity for staleness: only byte-identical
+  material context reuses an approval.

@@ -66,6 +66,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fan-out, provider-conflict mapping to the existing `conflicted`
   branch. Endpoints verified against official docs + live shapes.
   176/176 passing.
+- Stage-9 human review + controlled re-verification (internal
+  service layer, V1–V7 untouched): typed review lifecycle with
+  append-only audit events, deterministic priority, claim-level
+  identity-only approvals, `ManualAdapter` selection registry (never
+  source evidence), `reverify_candidate()` routing human selections
+  back through the frozen gate with stale-evidence rejection, plus a
+  documentation-based PubChem/ChEBI production-readiness audit
+  (quotas unknown, no credentials required). 206/206 passing.
 
 ### Fixed
 - Parser strips a leading `Ingredients:` label header (per `DATA_PIPELINE.md`
