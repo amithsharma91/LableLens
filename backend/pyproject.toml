@@ -16,6 +16,7 @@ dependencies = [
     "pydantic-settings",
     "sqlalchemy",
     "asyncpg",
+    "greenlet",
     "pytest",
     "pytest-asyncio",
     "httpx"
