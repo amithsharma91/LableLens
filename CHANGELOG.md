@@ -44,6 +44,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `exact_match | candidate | ambiguous | unresolved`; selection only on
   exact hit, never first-of-many; qualitative confidence only; no
   chemistry/verification/RDKit/AI/network. 63/63 passing.
+- Stage-6 verification architecture (`STAGE_6_VERIFICATION_ARCHITECTURE.md`,
+  architecture-only, no code): verification authority = versioned local
+  canonical snapshot + versioned ingestion + optional live refresh
+  (Option C); frozen gate V1–V7; state machine with append-only
+  transitions; claim-level entity/claim/source separation; conflict,
+  freshness, provenance, and failure models; Stage-7 contract.
 
 ### Fixed
 - Parser strips a leading `Ingredients:` label header (per `DATA_PIPELINE.md`

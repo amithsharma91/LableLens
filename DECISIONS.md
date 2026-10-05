@@ -603,3 +603,42 @@ registry + input always yields identical output.
 - Fuzzy-first matching as authority: unbounded similarity promotes guesses;
   OCR-near is therefore bounded (distance ≤ 2, length ≥ 5), flagged, and
   never selected.
+
+---
+
+## ADR-019 — Verification Authority and State Model (Stage 6)
+
+**Status:** Accepted (architecture; implementation deferred to Stage 7)
+**Date:** 2026-10-05
+
+### Context
+
+Stage 5 ends at plausible candidates. The `CANDIDATE → VERIFIED`
+transition is the highest-risk step in LabelLens: a weak promotion rule
+would silently convert string similarity into scientific fact. Full
+analysis in `STAGE_6_VERIFICATION_ARCHITECTURE.md`.
+
+### Decision
+
+Verification authority = **Option C**: a versioned local canonical
+snapshot decides; live official sources supply refresh evidence through
+provider-independent adapters; manual review breaks ties. Frozen gate
+V1–V7 (admissible candidate, authoritative source, identity agreement,
+identifier validation, entity-type validation, source appropriateness,
+context checks) with versioned rules. States split by owner (resolution:
+candidate-family; verification: provisional/verified/conflicted/
+unverified/unknown/obsolete) with append-only transitions. Verified
+status lives per claim row, never as entity-wide implication.
+
+### Consequences
+
+- Stage 7 must implement the gate, orchestrator, adapter ABC, snapshot
+  adapter + v1 seed, and the §15 test layers — and nothing beyond the
+  persistence boundary (no chemistry, roles, explanations).
+- No live source may write canonical truth without passing ingestion +
+  gate as a new snapshot version.
+
+**Rejected alternatives:**
+- Option A (snapshot-only forever): goes stale on dynamic facts.
+- Option B (live-API-only): non-reproducible, rate-limited, untestable
+  offline, unusable without network.
