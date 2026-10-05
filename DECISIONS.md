@@ -522,3 +522,43 @@ resolution, chemistry, roles, and evidence arrive in later vertical slices.
 **Rejected alternatives:**
 - Per-caller naive splitting: fast to write, silently breaks every nested
   declaration (`A (B, C), D`) and recreates the exact conflict the brief warns about.
+
+---
+
+## ADR-017 — Syntactic-Only Normalization Boundary (Stage 4)
+
+**Status:** Accepted  
+**Date:** 2026-10-05
+
+### Context
+
+Stage 4 sits between raw observation (Stage 2 parser tree) and entity
+resolution (Stage 5). Without an explicit boundary, normalization tends to
+accumulate identity guesses (alias→molecule mapping, OCR autocorrect,
+umbrella-term resolution) that belong to resolution/evidence stages.
+
+### Decision
+
+`backend/app/services/ingredient_normalizer.py :: normalize_result()` is the
+only normalization entry point. It consumes parser nodes and emits
+`NormalizedIngredient` records (own `id`, linked via `parser_node_id`) with:
+raw text, canonical text (lowercase except spaced uppercase additive codes),
+tree position, percentage, identifier, status
+(`complete | partial | failed` per `DATA_PIPELINE.md` Stage 4), warnings, and
+observation provenance. Warning taxonomy: `possible_ocr_variation`
+(detectable artefacts only — silent typos like `Sodlum` stay uncorrected),
+`uncertain_parse_<level>` (inherited parser uncertainty), `empty_observation`.
+
+Guarantees locked by regression tests: tree shape preserved (never
+flattened); `normalize(normalize(x)) == normalize(x)`; no
+chemical/identity/role/evidence fields exist on the output.
+
+### Consequences
+
+- Entity resolution must consume normalized nodes, never re-tokenize raw
+  text and never treat `normalized_text` as a verified identity.
+- Any future alias dictionary lives in resolution, not here.
+
+**Rejected alternatives:**
+- Autocorrect-style normalization (edit-distance fixing of OCR typos):
+  converts observations into guesses without evidence; explicitly forbidden.

@@ -22,6 +22,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Parser regression tests (`backend/app/tests/unit/test_ingredient_parser.py`) —
   brief §17 Cases A–J plus brackets/semicolons, raw-text preservation,
   no-chemistry-invention, ordering, and empty-input cases. 16/16 passing.
+- Syntactic normalization layer (Stage 4,
+  `backend/app/services/ingredient_normalizer.py`, v1.0.0) — canonical entry
+  point `normalize_result()` consuming parser nodes only. Case/whitespace/
+  unicode/punctuation canonicalization plus additive-code spacing
+  (`INS471` → `INS 471`). OCR typos preserved with `possible_ocr_variation`
+  warnings, never silently corrected. Idempotent. Chemistry-free by
+  construction (safety regression test asserts no identity/chemistry/
+  evidence fields).
+- Normalization regression tests
+  (`backend/app/tests/unit/test_ingredient_normalizer.py`) — gate items
+  1–16 plus alias-stays-text and no-chemistry safety tests. 35/35 passing
+  across the full suite.
 
 ### Fixed
 - Parser strips a leading `Ingredients:` label header (per `DATA_PIPELINE.md`
