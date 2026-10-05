@@ -1,0 +1,240 @@
+{
+  "records": [
+    {
+      "entity_id": "2671a263-ff76-4c1b-9b07-d3d8c521db1e",
+      "entity_type": "chemical_entity",
+      "fields": {
+        "formula": {
+          "value": "C6H8O7"
+        },
+        "inchi": {
+          "value": "InChI=1S/C6H8O7/c7-3(8)1-6(13,5(11)12)2-4(9)10/h13H,1-2H2,(H,7,8)(H,9,10)(H,11,12)"
+        },
+        "inchikey": {
+          "value": "KRKNYBCHXYNGOX-UHFFFAOYSA-N"
+        },
+        "molecular_weight": {
+          "unit": "g/mol",
+          "value": 192.12
+        },
+        "smiles": {
+          "value": "C(C(=O)O)C(CC(=O)O)(C(=O)O)O"
+        }
+      },
+      "identifiers": [
+        {
+          "id_type": "pubchem_cid",
+          "provenance_note": "PUG-REST property query for name 'citric acid', retrieved 2026-10-05",
+          "value": "311"
+        },
+        {
+          "id_type": "inchikey",
+          "provenance_note": "PUG-REST property query for name 'citric acid', retrieved 2026-10-05",
+          "value": "KRKNYBCHXYNGOX-UHFFFAOYSA-N"
+        },
+        {
+          "id_type": "e_number",
+          "provenance_note": "PubChem synonym 'E330' on CID 311 record, retrieved 2026-10-05",
+          "value": "E330"
+        },
+        {
+          "id_type": "ins_number",
+          "provenance_note": "PubChem synonym 'INS-330' on CID 311 record, retrieved 2026-10-05",
+          "value": "INS330"
+        }
+      ],
+      "last_checked": "2026-10-05",
+      "names": [
+        "Citric Acid",
+        "2-hydroxypropane-1,2,3-tricarboxylic acid"
+      ],
+      "preferred_name": "citric acid",
+      "provenance": {
+        "license_note": "PubChem data free to access; contributor-specific rights may apply per NCBI usage policies; values transcribed verbatim 2026-10-05, no inference applied",
+        "record_locator": "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/citric%20acid/property/Title,MolecularFormula,MolecularWeight,CanonicalSMILES,IsomericSMILES,InChI,InChIKey,IUPACName/JSON",
+        "retrieved_at": "2026-10-05",
+        "source_class": "A",
+        "source_id": "PUBCHEM",
+        "source_version": "live record retrieved 2026-10-05 (PUG-REST carries no per-record version)"
+      },
+      "representation_type": "single_molecule",
+      "verification_status": "verified",
+      "verified_at": "2026-10-05"
+    },
+    {
+      "entity_id": "6223de87-1d0c-49f9-a926-e2b57e0fc8ae",
+      "entity_type": "chemical_entity",
+      "fields": {
+        "formula": {
+          "value": "C7H5NaO2"
+        },
+        "inchi": {
+          "value": "InChI=1S/C7H6O2.Na/c8-7(9)6-4-2-1-3-5-6;/h1-5H,(H,8,9);/q;+1/p-1"
+        },
+        "inchikey": {
+          "value": "WXMKPNITSTVMEF-UHFFFAOYSA-M"
+        },
+        "molecular_weight": {
+          "unit": "g/mol",
+          "value": 144.1
+        },
+        "smiles": {
+          "value": "C1=CC=C(C=C1)C(=O)[O-].[Na+]"
+        }
+      },
+      "identifiers": [
+        {
+          "id_type": "pubchem_cid",
+          "provenance_note": "PUG-REST property query for name 'sodium benzoate', retrieved 2026-10-05",
+          "value": "517055"
+        },
+        {
+          "id_type": "inchikey",
+          "provenance_note": "PUG-REST property query for name 'sodium benzoate', retrieved 2026-10-05",
+          "value": "WXMKPNITSTVMEF-UHFFFAOYSA-M"
+        },
+        {
+          "id_type": "e_number",
+          "provenance_note": "PubChem synonym 'E211' on CID 517055 record, retrieved 2026-10-05",
+          "value": "E211"
+        },
+        {
+          "id_type": "ins_number",
+          "provenance_note": "PubChem synonym 'INS-211' on CID 517055 record, retrieved 2026-10-05",
+          "value": "INS211"
+        }
+      ],
+      "last_checked": "2026-10-05",
+      "names": [
+        "Sodium Benzoate",
+        "sodium benzoate"
+      ],
+      "preferred_name": "sodium benzoate",
+      "provenance": {
+        "license_note": "PubChem data free to access; contributor-specific rights may apply per NCBI usage policies; values transcribed verbatim 2026-10-05, no inference applied",
+        "record_locator": "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/sodium%20benzoate/property/Title,MolecularFormula,MolecularWeight,CanonicalSMILES,IsomericSMILES,InChI,InChIKey,IUPACName/JSON",
+        "retrieved_at": "2026-10-05",
+        "source_class": "A",
+        "source_id": "PUBCHEM",
+        "source_version": "live record retrieved 2026-10-05 (PUG-REST carries no per-record version)"
+      },
+      "representation_type": "salt",
+      "verification_status": "verified",
+      "verified_at": "2026-10-05"
+    },
+    {
+      "entity_id": "763389d0-3732-47dd-ad27-2c62a50e95b8",
+      "entity_type": "chemical_entity",
+      "fields": {
+        "formula": {
+          "value": "C3H8O3"
+        },
+        "inchi": {
+          "value": "InChI=1S/C3H8O3/c4-1-3(6)2-5/h3-6H,1-2H2"
+        },
+        "inchikey": {
+          "value": "PEDCQBHIVMGVHV-UHFFFAOYSA-N"
+        },
+        "molecular_weight": {
+          "unit": "g/mol",
+          "value": 92.09
+        },
+        "smiles": {
+          "value": "C(C(CO)O)O"
+        }
+      },
+      "identifiers": [
+        {
+          "id_type": "pubchem_cid",
+          "provenance_note": "PUG-REST property query for name 'glycerol', retrieved 2026-10-05",
+          "value": "753"
+        },
+        {
+          "id_type": "inchikey",
+          "provenance_note": "PUG-REST property query for name 'glycerol', retrieved 2026-10-05",
+          "value": "PEDCQBHIVMGVHV-UHFFFAOYSA-N"
+        },
+        {
+          "id_type": "e_number",
+          "provenance_note": "PubChem synonym 'E422' on CID 753 record, retrieved 2026-10-05",
+          "value": "E422"
+        },
+        {
+          "id_type": "ins_number",
+          "provenance_note": "PubChem synonym 'INS-422' on CID 753 record, retrieved 2026-10-05",
+          "value": "INS422"
+        }
+      ],
+      "last_checked": "2026-10-05",
+      "names": [
+        "Glycerol",
+        "propane-1,2,3-triol"
+      ],
+      "preferred_name": "glycerol",
+      "provenance": {
+        "license_note": "PubChem data free to access; contributor-specific rights may apply per NCBI usage policies; values transcribed verbatim 2026-10-05, no inference applied",
+        "record_locator": "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/glycerol/property/Title,MolecularFormula,MolecularWeight,CanonicalSMILES,IsomericSMILES,InChI,InChIKey,IUPACName/JSON",
+        "retrieved_at": "2026-10-05",
+        "source_class": "A",
+        "source_id": "PUBCHEM",
+        "source_version": "live record retrieved 2026-10-05 (PUG-REST carries no per-record version)"
+      },
+      "representation_type": "single_molecule",
+      "verification_status": "verified",
+      "verified_at": "2026-10-05"
+    },
+    {
+      "entity_id": "c5a7fba9-c693-4b5e-ad26-9f61bfe6b161",
+      "entity_type": "chemical_entity",
+      "fields": {
+        "formula": {
+          "value": "C2H6O"
+        },
+        "inchi": {
+          "value": "InChI=1S/C2H6O/c1-2-3/h3H,2H2,1H3"
+        },
+        "inchikey": {
+          "value": "LFQSCWFLJHTTHZ-UHFFFAOYSA-N"
+        },
+        "molecular_weight": {
+          "unit": "g/mol",
+          "value": 46.07
+        },
+        "smiles": {
+          "value": "CCO"
+        }
+      },
+      "identifiers": [
+        {
+          "id_type": "pubchem_cid",
+          "provenance_note": "PUG-REST property query for name 'ethanol', retrieved 2026-10-05",
+          "value": "702"
+        },
+        {
+          "id_type": "inchikey",
+          "provenance_note": "PUG-REST property query for name 'ethanol', retrieved 2026-10-05",
+          "value": "LFQSCWFLJHTTHZ-UHFFFAOYSA-N"
+        }
+      ],
+      "last_checked": "2026-10-05",
+      "names": [
+        "Ethanol",
+        "ethanol"
+      ],
+      "preferred_name": "ethanol",
+      "provenance": {
+        "license_note": "PubChem data free to access; contributor-specific rights may apply per NCBI usage policies; values transcribed verbatim 2026-10-05, no inference applied",
+        "record_locator": "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/ethanol/property/Title,MolecularFormula,MolecularWeight,CanonicalSMILES,IsomericSMILES,InChI,InChIKey,IUPACName/JSON",
+        "retrieved_at": "2026-10-05",
+        "source_class": "A",
+        "source_id": "PUBCHEM",
+        "source_version": "live record retrieved 2026-10-05 (PUG-REST carries no per-record version)"
+      },
+      "representation_type": "single_molecule",
+      "verification_status": "verified",
+      "verified_at": "2026-10-05"
+    }
+  ],
+  "snapshot_version": "canonical_v1",
+  "verification_rule_version": "1.0.0"
+}
