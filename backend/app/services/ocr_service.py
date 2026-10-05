@@ -96,6 +96,7 @@ class OCRService:
         result: OCRResult,
         *,
         run_id: Optional[str] = None,
+        owner: Optional[str] = None,
         role: str = "service",
     ) -> dict:
         """Persist one immutable OCR run. No parsing happens here."""
@@ -109,6 +110,7 @@ class OCRService:
                 document_id=result.document_id,
                 provider=result.provider,
                 raw_text=result.raw_text,
+                owner_subject=owner,
                 provider_version=result.provider_version,
                 ocr_confidence=result.ocr_confidence,
                 page_metadata=dict(result.page_metadata or {}),
@@ -126,6 +128,7 @@ class OCRService:
         *,
         document_locator: Optional[str] = None,
         run_id: Optional[str] = None,
+        owner: Optional[str] = None,
         role: str = "service",
     ) -> dict:
         """Extract via a named provider, then persist the run.
@@ -150,7 +153,7 @@ class OCRService:
                 "provider %r failed: %s" % (
                     provider_name, type(exc).__name__))
         return await self.register_result(
-            result, run_id=run_id, role=role)
+            result, run_id=run_id, owner=owner, role=role)
 
     # -- correct ---------------------------------------------------------
 
@@ -161,6 +164,7 @@ class OCRService:
         corrected_text: str,
         reason: str,
         actor: str,
+        owner: Optional[str] = None,
         role: str = "service",
     ) -> dict:
         """Record the run's single human revision without touching raw.
@@ -178,9 +182,11 @@ class OCRService:
         if not (actor or "").strip():
             raise _errors.ServiceError("correction actor is required")
         try:
-            await self._repos.ocr.get_run(run_id, role=role)
+            stored = await self._repos.ocr.get_run(run_id, role=role)
         except KeyError:
             raise _errors.NotFoundError("ocr run not found")
+        ObservationService._require_owner(
+            stored.get("owner_subject"), owner)
         try:
             await self._repos.ocr.get_correction(run_id, role=role)
         except KeyError:
@@ -193,6 +199,7 @@ class OCRService:
                 corrected_text=corrected_text.strip(),
                 reason=reason.strip(),
                 actor=actor.strip(),
+                owner_subject=owner,
             ),
             role=role,
         )
@@ -200,12 +207,15 @@ class OCRService:
             str(run_id), role="service")
 
     async def _effective_text(
-        self, run_id: str, *, role: str
+        self, run_id: str, *, owner: Optional[str] = None,
+        role: str = "service",
     ) -> tuple:
         try:
             run = await self._repos.ocr.get_run(run_id, role=role)
         except KeyError:
             raise _errors.NotFoundError("ocr run not found")
+        ObservationService._require_owner(
+            run.get("owner_subject"), owner)
         try:
             correction = await self._repos.ocr.get_correction(
                 str(run_id), role=role)
@@ -218,7 +228,8 @@ class OCRService:
     # -- observe + analyze -----------------------------------------------
 
     async def observe(
-        self, run_id: str, *, role: str = "service"
+        self, run_id: str, *, owner: Optional[str] = None,
+        role: str = "service",
     ) -> dict:
         """Derive observations from corrected-or-raw run text.
 
@@ -229,7 +240,7 @@ class OCRService:
         warning outcome -- never a crash, never an invented entity.
         """
         run, text, kind = await self._effective_text(
-            run_id, role=role)
+            run_id, owner=owner, role=role)
         parsed = parse_label_ingredients(text or "")
         warnings: List[str] = list(parsed.limitations)
         if not text or not text.strip():
@@ -254,6 +265,7 @@ class OCRService:
             source_type="ocr",
             ocr_run_id=str(run["id"]),
             ocr_confidence=run.get("ocr_confidence"),
+            owner=run.get("owner_subject"),
             role=role,
         )
         return {
@@ -265,14 +277,16 @@ class OCRService:
         }
 
     async def analyze_run(
-        self, run_id: str, *, role: str = "service"
+        self, run_id: str, *, owner: Optional[str] = None,
+        role: str = "service",
     ) -> dict:
         """Observe, then analyze every derived observation."""
-        observed = await self.observe(run_id, role=role)
+        observed = await self.observe(
+            run_id, owner=owner, role=role)
         items = []
         for item in observed["items"]:
             analyzed = await self._observations.analyze(
-                item["observation_id"], role=role)
+                item["observation_id"], owner=owner, role=role)
             items.append({
                 "observation_id": item["observation_id"],
                 "raw_text": item["raw_text"],
@@ -287,7 +301,8 @@ class OCRService:
         return observed
 
     async def describe(
-        self, run_id: str, *, role: str = "service"
+        self, run_id: str, *, owner: Optional[str] = None,
+        role: str = "service",
     ) -> dict:
         """Run plus correction plus derived observations (OCR layer).
 
@@ -298,6 +313,8 @@ class OCRService:
             run = await self._repos.ocr.get_run(run_id, role=role)
         except KeyError:
             raise _errors.NotFoundError("ocr run not found")
+        ObservationService._require_owner(
+            run.get("owner_subject"), owner)
         try:
             correction = await self._repos.ocr.get_correction(
                 str(run_id), role=role)

@@ -155,16 +155,19 @@ def test_analyze_is_limited_independently():
 
 
 def test_analyze_policy_does_not_consume_the_create_bucket():
+    # One subject throughout: observations are owned per subject
+    # since Stage 17, so the analyze target must belong to the
+    # caller. Bucket separation is unchanged: five analyzes do not
+    # consume any of the two creations.
     client, _, _ = _app(policy=_StaticPolicy(create="2/60", analyze="5/60"))
-    for _ in range(2):
-        assert _create(client).status_code == 201
-    # Creation is exhausted for this subject; analyze has its own
-    # allowance and its own bucket key.
-    assert _create(client).status_code == 429
-    observation_id = _observe(client, token=REVIEWER1)
+    observation_id = _observe(client)
     path = "/api/v1/observations/%s/analyze" % observation_id
     for _ in range(5):
         assert client.post(path, headers=auth(READER)).status_code == 200
+    assert _create(client).status_code == 201
+    # Creation is exhausted for this subject while analyze had its
+    # own allowance and its own bucket key.
+    assert _create(client).status_code == 429
 
 
 # -- decision ----------------------------------------------------------

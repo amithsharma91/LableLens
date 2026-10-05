@@ -14,6 +14,7 @@ from app.repositories.memory import MemoryUnitOfWork
 from app.services.ocr_provider import FakeOCRProvider, OCRResult
 from app.tests.api.helpers import (
     READER,
+    REVIEWER1,
     auth,
     envelope,
     register_snapshot_entities,
@@ -224,6 +225,61 @@ def test_ocr_routes_reuse_observation_budgets():
         "/api/v1/ocr/runs/%s/analyze" % run_id,
         headers=auth(READER))
     assert refused.status_code == 429
+
+
+def test_cross_user_access_is_not_found_everywhere():
+    # READER ("reader") owns the run; REVIEWER1 ("reviewer1") is a
+    # stranger. Every route answers 404 with the standard NOT_FOUND
+    # code -- never a body that distinguishes "foreign" from
+    # "missing", so runs cannot be enumerated.
+    client = _app()
+    run_id = envelope(_ingest(client), status=201)["run_id"]
+    stranger = auth(REVIEWER1)
+    for response in (
+        client.get("/api/v1/ocr/runs/%s" % run_id, headers=stranger),
+        client.post(
+            "/api/v1/ocr/runs/%s/correction" % run_id,
+            json={"corrected_text": "x", "reason": "r"},
+            headers=stranger),
+        client.post("/api/v1/ocr/runs/%s/analyze" % run_id,
+                    headers=stranger),
+    ):
+        assert response.status_code == 404, response.text
+        assert response.json()["error"]["code"] == "NOT_FOUND"
+    # The owner is unaffected throughout.
+    assert envelope(client.get(
+        "/api/v1/ocr/runs/%s" % run_id,
+        headers=auth(READER)))["run_id"] == run_id
+
+
+def test_cross_user_observation_read_is_not_found():
+    client = _app()
+    created = envelope(client.post(
+        "/api/v1/observations", json={"raw_text": "citric acid"},
+        headers=auth(READER)), status=201)
+    observation_id = created[0]["observation_id"]
+    # Analyzed by the owner first, so a stranger 404 can only mean
+    # ownership isolation (not "not yet analyzed").
+    assert envelope(client.post(
+        "/api/v1/observations/%s/analyze" % observation_id,
+        headers=auth(READER)))["status"] == "provisional"
+    stranger = auth(REVIEWER1)
+    for path in (
+        "/api/v1/observations/%s" % observation_id,
+        "/api/v1/observations/%s/verification" % observation_id,
+        "/api/v1/observations/%s/candidates" % observation_id,
+    ):
+        response = client.get(path, headers=stranger)
+        assert response.status_code == 404, (path, response.text)
+        assert response.json()["error"]["code"] == "NOT_FOUND"
+    response = client.post(
+        "/api/v1/observations/%s/analyze" % observation_id,
+        headers=stranger)
+    assert response.status_code == 404, response.text
+    assert envelope(client.get(
+        "/api/v1/observations/%s" % observation_id,
+        headers=auth(READER)))["observation"][
+            "observation_id"] == observation_id
 
 
 def test_unknown_provider_is_422_and_failing_provider_is_503():

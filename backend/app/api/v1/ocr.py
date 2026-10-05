@@ -95,6 +95,7 @@ async def create_ocr_run(
                     str(payload.run_id)
                     if payload.run_id is not None else None
                 ),
+                owner=principal.subject,
                 role="service",
             )
         else:
@@ -106,6 +107,7 @@ async def create_ocr_run(
                     str(payload.run_id)
                     if payload.run_id is not None else None
                 ),
+                owner=principal.subject,
                 role="service",
             )
     except ProviderFailure as exc:
@@ -134,7 +136,8 @@ async def get_ocr_run(
     """OCR-layer data only: run, correction, observation links."""
     service = _service(request)
     try:
-        described = await service.describe(run_id, role="service")
+        described = await service.describe(
+            run_id, owner=principal.subject, role="service")
     except _service_errors.NotFoundError:
         raise ApiError(404, "NOT_FOUND", "ocr run not found")
     data = _run_view(described["run"], described["correction"])
@@ -171,6 +174,7 @@ async def correct_ocr_run(
             corrected_text=payload.corrected_text,
             reason=payload.reason,
             actor=principal.reviewer_id,
+            owner=principal.subject,
             role="service",
         )
     except _service_errors.NotFoundError:
@@ -212,7 +216,8 @@ async def analyze_ocr_run(
     """
     service = _service(request)
     try:
-        result = await service.analyze_run(run_id, role="service")
+        result = await service.analyze_run(
+            run_id, owner=principal.subject, role="service")
     except _service_errors.NotFoundError:
         raise ApiError(404, "NOT_FOUND", "ocr run not found")
     except _service_errors.ServiceError as exc:

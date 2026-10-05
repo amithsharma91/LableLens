@@ -88,6 +88,7 @@ def _migrations():
             "002_seed_data.sql",
             "003_verification_review.sql",
             "004_ocr_boundary.sql",
+            "005_ocr_ownership.sql",
         )
     ]
 
@@ -253,16 +254,19 @@ def test_live_ocr_run_and_correction_persist(live):
             source_reference={"scan": "scan-a"},
         ),
         run_id="aaaaaaaa-aaaa-4111-8111-aaaaaaaaaaaa",
+        owner="test-owner",
         role="service",
     ))
     assert outcome["raw_text"] == "Sodium Benzoatc (E211)"
     runs = _fetch_all("SELECT * FROM ocr_runs")
     assert len(runs) == 1
     assert runs[0]["raw_text"] == "Sodium Benzoatc (E211)"
+    assert runs[0]["owner_subject"] == "test-owner"
     assert float(runs[0]["ocr_confidence"]) == 0.6
     assert _json(runs[0]["page_metadata"]) == {"page": 1}
     correction, _ = _await(live(
         "correct_run", outcome["id"],
+        owner="test-owner",
         corrected_text="Sodium Benzoate (E211)",
         reason="ocr substitution", actor="human:reviewer-1",
         role="service",
@@ -284,14 +288,17 @@ def test_live_second_correction_refused(live):
         OCRResult(
             document_id="doc-b", provider="fake-test",
             raw_text="water"),
+        owner="test-owner",
         role="service",
     ))
     _await(live(
-        "correct_run", outcome["id"], corrected_text="Water!",
+        "correct_run", outcome["id"], owner="test-owner",
+        corrected_text="Water!",
         reason="first", actor="human:r", role="service"))
     with pytest.raises(Exception):
         _await(live(
-            "correct_run", outcome["id"], corrected_text="Water?",
+            "correct_run", outcome["id"], owner="test-owner",
+            corrected_text="Water?",
             reason="second", actor="human:r", role="service"))
     assert len(_fetch_all("SELECT * FROM ocr_corrections")) == 1
 
@@ -312,8 +319,10 @@ def test_live_provider_failure_persists_nothing(live):
 @needs_db
 def test_live_ocr_to_verified_persists_everything(live):
     outcome, _ = _await(live(
-        "extract_with", "fake-test", "doc-live", role="service"))
+        "extract_with", "fake-test", "doc-live", owner="test-owner",
+        role="service"))
     analyzed, _ = _await(live("analyze_run", outcome["id"],
+                              owner="test-owner",
                               role="service"))
     assert analyzed["corrected"] is False
     assert len(analyzed["items"]) == 2
@@ -350,16 +359,20 @@ def test_live_corrected_run_reaches_verified(live):
         OCRResult(
             document_id="doc-c", provider="fake-test",
             raw_text="Sodium Benzoatc (E211)"),
+        owner="test-owner",
         role="service",
     ))
     before, _ = _await(live("analyze_run", outcome["id"],
+                            owner="test-owner",
                             role="service"))
     assert before["items"][0]["decision"]["status"] == "unverified"
     _await(live(
         "correct_run", outcome["id"],
+        owner="test-owner",
         corrected_text="Sodium Benzoate (E211)",
         reason="ocr substitution", actor="human:r", role="service"))
     after, _ = _await(live("analyze_run", outcome["id"],
+                           owner="test-owner",
                            role="service"))
     assert after["corrected"] is True
     assert after["items"][0]["decision"]["status"] == "verified"
@@ -371,10 +384,105 @@ def test_live_corrected_run_reaches_verified(live):
 
 
 @needs_db
+def test_live_rls_isolates_owners_at_the_database(live):
+    run_a, _ = _await(live(
+        "register_result",
+        OCRResult(
+            document_id="doc-rls-a", provider="fake-test",
+            raw_text="water"),
+        owner="user-a",
+        role="service",
+    ))
+    run_b, _ = _await(live(
+        "register_result",
+        OCRResult(
+            document_id="doc-rls-b", provider="fake-test",
+            raw_text="water"),
+        owner="user-b",
+        role="service",
+    ))
+    # A legacy pre-ownership observation row (NULL owner), as left
+    # by earlier stages: readable by every authenticated subject.
+    _await(_sql(
+        "INSERT INTO ingredient_observations (id, scan_id, "
+        "sequence_number, raw_text, source_type) VALUES "
+        "('22222222-2222-4222-8222-222222222222', "
+        "'33333333-3333-4333-8333-333333333333', 0, 'legacy', 'ocr')"))
+
+    async def as_subject(subject, sql, *params):
+        conn = await asyncpg.connect(**_asyncpg_kwargs())
+        try:
+            await conn.execute("SET ROLE authenticated")
+            if subject is None:
+                await conn.execute("RESET app.current_subject")
+            else:
+                await conn.execute(
+                    "SET app.current_subject = '%s'" % subject)
+            return await conn.fetch(sql, *params)
+        finally:
+            await conn.close()
+
+    async def go():
+        # Each owner sees exactly their own run; an unset subject
+        # sees nothing (fail closed, never fail open).
+        assert {
+            str(row["id"]) for row in await as_subject(
+                "user-a", "SELECT id FROM ocr_runs")
+        } == {run_a["id"]}
+        assert {
+            str(row["id"]) for row in await as_subject(
+                "user-b", "SELECT id FROM ocr_runs")
+        } == {run_b["id"]}
+        assert list(await as_subject(
+            None, "SELECT id FROM ocr_runs")) == []
+        # Cross-owner observations follow the same rule; legacy
+        # NULL-owner rows stay readable by everyone.
+        legacy = "22222222-2222-4222-8222-222222222222"
+        assert legacy in {
+            str(row["id"]) for row in await as_subject(
+                "user-a", "SELECT id FROM ingredient_observations")
+        }
+        assert legacy in {
+            str(row["id"]) for row in await as_subject(
+                "user-b", "SELECT id FROM ingredient_observations")
+        }
+        # Writes are denied to the authenticated role entirely:
+        # every write path goes through the service role.
+        for statement in (
+            "INSERT INTO ocr_runs (document_id, provider, raw_text,"
+            " owner_subject) VALUES ('x', 'y', 'z', 'user-a')",
+            "UPDATE ocr_runs SET raw_text = 'x'",
+            "DELETE FROM ocr_runs",
+            "INSERT INTO ocr_corrections (ocr_run_id, corrected_text,"
+            " reason, actor, owner_subject) VALUES "
+            "('%s', 'x', 'y', 'z', 'user-a')" % run_a["id"],
+        ):
+            try:
+                await as_subject("user-a", statement)
+            except Exception as exc:
+                assert "permission denied" in str(exc).lower(), exc
+            else:
+                raise AssertionError(
+                    "authenticated write allowed: %s" % statement)
+
+    _await(go())
+
+
+async def _sql(statement):
+    conn = await asyncpg.connect(**_asyncpg_kwargs())
+    try:
+        await conn.execute(statement)
+    finally:
+        await conn.close()
+
+
+@needs_db
 def test_live_rerun_is_stable(live):
     outcome, _ = _await(live(
-        "extract_with", "fake-test", "doc-live", role="service"))
+        "extract_with", "fake-test", "doc-live", owner="test-owner",
+        role="service"))
     first, _ = _await(live("analyze_run", outcome["id"],
+                           owner="test-owner",
                            role="service"))
     before = {
         table: _fetch_all("SELECT count(*) AS total FROM %s" % table)[
@@ -385,6 +493,7 @@ def test_live_rerun_is_stable(live):
                       "verification_decisions", "claims")
     }
     second, _ = _await(live("analyze_run", outcome["id"],
+                            owner="test-owner",
                             role="service"))
     assert [item["observation_id"]
             for item in second["items"]] == [

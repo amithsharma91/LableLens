@@ -100,7 +100,8 @@ async def get_verification(
     """Status, confidence, versions, gate, claims, history."""
     service = _services(request).observations
     try:
-        result = await service.get_verification(observation_id)
+        result = await service.get_verification(
+            observation_id, owner=principal.subject)
     except _service_errors.NotFoundError as exc:
         raise ApiError(404, "NOT_FOUND", str(exc))
     decision = result["decision"]
@@ -182,7 +183,8 @@ async def get_resolution_alias(
     """Same data as /candidates, kept for spec-naming compatibility."""
     service = _services(request).observations
     try:
-        result = await service.get_candidates(observation_id)
+        result = await service.get_candidates(
+            observation_id, owner=principal.subject)
     except _service_errors.NotFoundError as exc:
         raise ApiError(404, "NOT_FOUND", str(exc))
     entity = result.get("entity")

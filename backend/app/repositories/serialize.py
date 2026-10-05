@@ -379,6 +379,7 @@ def observation_row(
     original_text: Optional[str] = None,
     ocr_run_id: Optional[str] = None,
     ocr_confidence: Optional[float] = None,
+    owner_subject: Optional[str] = None,
 ) -> dict:
     """Serialize one parser node to an ingredient_observations row."""
     return {
@@ -393,6 +394,7 @@ def observation_row(
         "user_corrected": user_corrected,
         "original_text": original_text,
         "correction_reason": None,
+        "owner_subject": owner_subject,
     }
 
 
@@ -481,7 +483,8 @@ def match_row(
 
 def ocr_run_row(
     *, run_id: str, document_id: str, provider: str,
-    raw_text: str, provider_version: Optional[str] = None,
+    raw_text: str, owner_subject: Optional[str] = None,
+    provider_version: Optional[str] = None,
     ocr_confidence: Optional[float] = None,
     page_metadata: Optional[dict] = None,
     source_reference: Optional[dict] = None,
@@ -502,12 +505,13 @@ def ocr_run_row(
         "ocr_confidence": ocr_confidence,
         "page_metadata": page_metadata,
         "source_reference": source_reference,
+        "owner_subject": owner_subject,
     }
 
 
 def ocr_correction_row(
     *, ocr_run_id: str, corrected_text: str, reason: str,
-    actor: str,
+    actor: str, owner_subject: Optional[str] = None,
 ) -> dict:
     """Serialize one OCR-run correction (single revision per run).
 
@@ -525,4 +529,5 @@ def ocr_correction_row(
         "corrected_text": corrected_text,
         "reason": reason,
         "actor": actor,
+        "owner_subject": owner_subject,
     }

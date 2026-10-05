@@ -48,14 +48,26 @@ def _valid_confidence(value: object) -> bool:
 
 @dataclass(frozen=True)
 class OCRDocument:
-    """Reference to an input image/document (never its bytes)."""
+    """Reference to an input image/document.
+
+    `locator` is an opaque reference (URL, storage key); `content`
+    carries raw bytes in memory only when a provider needs them
+    (e.g. base64 upload). Bytes are never persisted: `OCRResult`
+    carries no content field, and serialization builders take only
+    whitelisted scalar fields, so content cannot leak into a row.
+    """
 
     document_id: str
     locator: Optional[str] = None
+    content: Optional[bytes] = None
 
     def __post_init__(self) -> None:
         if not self.document_id.strip():
             raise ValueError("document_id is required")
+        if self.content is not None and not isinstance(
+            self.content, (bytes, bytearray)
+        ):
+            raise ValueError("content must be bytes")
 
 
 @dataclass(frozen=True)

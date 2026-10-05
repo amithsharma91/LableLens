@@ -71,6 +71,8 @@ MIGRATED_TABLES = (
     "ingredient_observations",
     "ingredient_aliases",
     "chemical_entities",
+    "ocr_corrections",
+    "ocr_runs",
     "sources",
     "domains",
     "roles",
@@ -89,6 +91,7 @@ def _migrations():
             "002_seed_data.sql",
             "003_verification_review.sql",
             "004_ocr_boundary.sql",
+            "005_ocr_ownership.sql",
         )
     ]
 

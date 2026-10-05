@@ -1,4 +1,4 @@
-"""Static validation of migrations 003-004 (no live database needed).
+"""Static validation of migrations 003-005 (no live database needed).
 
 Asserts the migrations declare every table/column/index/constraint/
 policy the Postgres metadata layer expects, so schema drift fails
@@ -23,6 +23,7 @@ def _sql():
         for name in (
             "003_verification_review.sql",
             "004_ocr_boundary.sql",
+            "005_ocr_ownership.sql",
         )
     )
 
@@ -31,6 +32,7 @@ def test_migration_files_exist():
     for name in (
         "003_verification_review.sql",
         "004_ocr_boundary.sql",
+        "005_ocr_ownership.sql",
     ):
         assert (MIGRATIONS / name).exists(), name
 

@@ -92,6 +92,7 @@ async def create_observation(
                 str(payload.observation_id)
                 if payload.observation_id else None
             ),
+            owner=principal.subject,
         )
     except _service_errors.ServiceError as exc:
         raise ApiError(422, "VALIDATION_ERROR", str(exc))
@@ -136,7 +137,8 @@ async def get_observation(
     """Observation, normalization, and re-derived tree."""
     service = _service(request)
     try:
-        result = await service.get(str(observation_id))
+        result = await service.get(
+            str(observation_id), owner=principal.subject)
     except _service_errors.NotFoundError:
         raise ApiError(404, "NOT_FOUND", "observation not found")
     response = ObservationDetailResponse(
@@ -176,7 +178,8 @@ async def analyze_observation(
     """Run resolve + verify + persist (+ review routing)."""
     service = _service(request)
     try:
-        result = await service.analyze(str(observation_id))
+        result = await service.analyze(
+            str(observation_id), owner=principal.subject)
     except _service_errors.NotFoundError:
         raise ApiError(404, "NOT_FOUND", "observation not found")
     except _service_errors.MissingEntityError as exc:
@@ -244,7 +247,8 @@ async def get_candidates(
     """Raw, normalized, method, status, entity, alternatives."""
     service = _service(request)
     try:
-        result = await service.get_candidates(str(observation_id))
+        result = await service.get_candidates(
+            str(observation_id), owner=principal.subject)
     except _service_errors.NotFoundError as exc:
         raise ApiError(404, "NOT_FOUND", str(exc))
     response = ResolutionResponse(

@@ -85,6 +85,7 @@ _register(Table(
     Column("user_corrected", Boolean, nullable=False, default=False),
     Column("original_text", Text),
     Column("correction_reason", Text),
+    Column("owner_subject", Text),
     _ts("created_at"), _ts("updated_at"),
 ))
 
@@ -243,6 +244,7 @@ _register(Table(
     Column("ocr_confidence", NUMERIC),
     Column("page_metadata", JSONB),
     Column("source_reference", JSONB),
+    Column("owner_subject", Text),
     _ts("created_at"),
 ))
 
@@ -253,6 +255,7 @@ _register(Table(
     Column("corrected_text", Text, nullable=False),
     Column("reason", Text, nullable=False),
     Column("actor", Text, nullable=False),
+    Column("owner_subject", Text),
     _ts("created_at"),
 ))
 

@@ -96,6 +96,7 @@ class ObservationService:
         source_type: str = "ocr",
         ocr_run_id: Optional[str] = None,
         ocr_confidence: Optional[float] = None,
+        owner: Optional[str] = None,
         role: str = "service",
     ) -> dict:
         """Parse raw text and persist one observation per top-level node.
@@ -139,6 +140,7 @@ class ObservationService:
                     source_type=source_type,
                     ocr_run_id=ocr_run_id,
                     ocr_confidence=ocr_confidence,
+                    owner_subject=owner,
                 ),
                 role=role,
             )
@@ -183,6 +185,7 @@ class ObservationService:
         *,
         corrected_text: str,
         reason: str,
+        owner: Optional[str] = None,
         role: str = "service",
     ) -> dict:
         """Record a human correction without rewriting history.
@@ -206,6 +209,7 @@ class ObservationService:
                 observation_id, role=role)
         except KeyError:
             raise _errors.NotFoundError("observation not found")
+        self._require_owner(stored.get("owner_subject"), owner)
         if stored.get("user_corrected"):
             raise _errors.ServiceError("observation already corrected")
         updated = await self._repos.matches.record_correction(
@@ -242,7 +246,8 @@ class ObservationService:
     # -- analyze -----------------------------------------------------------
 
     async def analyze(
-        self, observation_id: str, *, role: str = "service"
+        self, observation_id: str, *, owner: Optional[str] = None,
+        role: str = "service",
     ) -> dict:
         """Resolve + verify one observation; persist everything.
 
@@ -250,7 +255,8 @@ class ObservationService:
         correction exists, otherwise on the raw text. The raw text
         itself is never altered by this step.
         """
-        chain = await self._chain(observation_id, role=role)
+        chain = await self._chain(
+            observation_id, owner=owner, role=role)
         effective = (
             chain["observation"].get("display_text")
             or chain["observation"]["raw_text"]
@@ -297,10 +303,12 @@ class ObservationService:
     # -- reads ---------------------------------------------------------------
 
     async def get(
-        self, observation_id: str, *, role: str = "authenticated"
+        self, observation_id: str, *, owner: Optional[str] = None,
+        role: str = "authenticated",
     ) -> dict:
         """Observation + normalization + live re-derived tree."""
-        chain = await self._chain(observation_id, role=role)
+        chain = await self._chain(
+            observation_id, owner=owner, role=role)
         observation = chain["observation"]
         effective = (
             observation.get("display_text") or observation["raw_text"]
@@ -318,10 +326,12 @@ class ObservationService:
         }
 
     async def get_candidates(
-        self, observation_id: str, *, role: str = "authenticated"
+        self, observation_id: str, *, owner: Optional[str] = None,
+        role: str = "authenticated",
     ) -> dict:
         """Resolution view: raw, normalized, method, status, alternatives."""
-        chain = await self._chain(observation_id, role=role)
+        chain = await self._chain(
+            observation_id, owner=owner, role=role)
         match = chain["match"]
         if match is None:
             raise _errors.NotFoundError("not yet analyzed")
@@ -359,10 +369,12 @@ class ObservationService:
         return resolution
 
     async def get_verification(
-        self, observation_id: str, *, role: str = "authenticated"
+        self, observation_id: str, *, owner: Optional[str] = None,
+        role: str = "authenticated",
     ) -> dict:
         """Current decision + claims + evidence + history."""
-        chain = await self._chain(observation_id, role=role)
+        chain = await self._chain(
+            observation_id, owner=owner, role=role)
         match = chain["match"]
         if match is None:
             raise _errors.NotFoundError("not yet analyzed")
@@ -425,13 +437,35 @@ class ObservationService:
 
     # -- internals ---------------------------------------------------------------
 
-    async def _chain(self, observation_id: str, *, role: str) -> dict:
+    async def _chain(
+        self, observation_id: str, *, owner: Optional[str] = None,
+        role: str,
+    ) -> dict:
         try:
             norm = await self._repos.matches.get_normalization_for_observation(
                 observation_id, role=role
             )
-            return await self._repos.matches.get_chain(norm["id"], role=role)
+            chain = await self._repos.matches.get_chain(
+                norm["id"], role=role)
         except KeyError:
+            raise _errors.NotFoundError("observation not found")
+        self._require_owner(
+            chain["observation"].get("owner_subject"), owner)
+        return chain
+
+    @staticmethod
+    def _require_owner(row_owner, owner: Optional[str]) -> None:
+        """Refuse foreign owned rows as not-found (anti-enumeration).
+
+        Rows without an owner predate ownership and keep legacy
+        readability; rows owned by another subject answer exactly
+        like missing rows so callers cannot probe for them.
+        """
+        if (
+            owner is not None
+            and row_owner is not None
+            and row_owner != owner
+        ):
             raise _errors.NotFoundError("observation not found")
 
     @staticmethod

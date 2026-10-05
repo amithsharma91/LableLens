@@ -99,6 +99,16 @@ class Settings(BaseSettings):
     )
     rate_limit_max_keys: int = _int_env("RATE_LIMIT_MAX_KEYS", 10_000)
 
+    # -- OCR provider (Stage 17) -------------------------------------
+    # A real OCR vendor is intentionally unwired by default: no key,
+    # no calls. When set, the OCR.space adapter authenticates with
+    # this key only; the key is never logged, returned, or persisted.
+    ocr_space_api_key: str = os.getenv("OCR_SPACE_API_KEY", "")
+    ocr_space_endpoint: str = os.getenv(
+        "OCR_SPACE_ENDPOINT",
+        "https://api.ocr.space/parse/image",
+    )
+
     # -- Canonical entity registration (service-role import) ----------
     # Interlock: the import refuses to run unless this is set to the
     # literal `service-role`. It is never set by the API process.
