@@ -37,6 +37,8 @@ __all__ = [
     "candidate_rows",
     "match_row",
     "timestamp_value",
+    "ocr_run_row",
+    "ocr_correction_row",
 ]
 
 _SECRET_KEY_RE = re.compile(
@@ -375,6 +377,8 @@ def observation_row(
     raw_text: str, display_text: Optional[str] = None,
     source_type: str = "ocr", user_corrected: bool = False,
     original_text: Optional[str] = None,
+    ocr_run_id: Optional[str] = None,
+    ocr_confidence: Optional[float] = None,
 ) -> dict:
     """Serialize one parser node to an ingredient_observations row."""
     return {
@@ -384,8 +388,8 @@ def observation_row(
         "raw_text": raw_text,
         "display_text": display_text,
         "source_type": source_type,
-        "ocr_run_id": None,
-        "ocr_confidence": None,
+        "ocr_run_id": ocr_run_id,
+        "ocr_confidence": ocr_confidence,
         "user_corrected": user_corrected,
         "original_text": original_text,
         "correction_reason": None,
@@ -472,4 +476,53 @@ def match_row(
         "reason_code": "; ".join(resolution.methods or []),
         "review_status": None,
         "review_notes": None,
+    }
+
+
+def ocr_run_row(
+    *, run_id: str, document_id: str, provider: str,
+    raw_text: str, provider_version: Optional[str] = None,
+    ocr_confidence: Optional[float] = None,
+    page_metadata: Optional[dict] = None,
+    source_reference: Optional[dict] = None,
+) -> dict:
+    """Serialize one OCR extraction to an ocr_runs row.
+
+    Carries transcription plus provenance only: no normalized
+    identity, no entity, no chemistry, no evidence. Deterministic
+    ids come from the caller (client-supplied or uuid4); retries
+    with the same id insert nothing twice.
+    """
+    return {
+        "id": run_id,
+        "document_id": document_id,
+        "provider": provider,
+        "provider_version": provider_version,
+        "raw_text": raw_text,
+        "ocr_confidence": ocr_confidence,
+        "page_metadata": page_metadata,
+        "source_reference": source_reference,
+    }
+
+
+def ocr_correction_row(
+    *, ocr_run_id: str, corrected_text: str, reason: str,
+    actor: str,
+) -> dict:
+    """Serialize one OCR-run correction (single revision per run).
+
+    The id derives from the run id, so a repeated correction
+    attempt addresses the same row instead of forking history; the
+    UNIQUE(ocr_run_id) constraint plus the service-layer refusal
+    keep it to one revision.
+    """
+    return {
+        "id": str(uuid.uuid5(
+            uuid.NAMESPACE_URL,
+            "|".join(["ocr_correction", ocr_run_id]),
+        )),
+        "ocr_run_id": ocr_run_id,
+        "corrected_text": corrected_text,
+        "reason": reason,
+        "actor": actor,
     }

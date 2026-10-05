@@ -233,6 +233,29 @@ _register(Table(
     _ts("created_at"),
 ))
 
+_register(Table(
+    "ocr_runs", metadata,
+    _id(),
+    Column("document_id", Text, nullable=False),
+    Column("provider", Text, nullable=False),
+    Column("provider_version", Text),
+    Column("raw_text", Text, nullable=False),
+    Column("ocr_confidence", NUMERIC),
+    Column("page_metadata", JSONB),
+    Column("source_reference", JSONB),
+    _ts("created_at"),
+))
+
+_register(Table(
+    "ocr_corrections", metadata,
+    _id(),
+    Column("ocr_run_id", PG_UUID(as_uuid=False), nullable=False),
+    Column("corrected_text", Text, nullable=False),
+    Column("reason", Text, nullable=False),
+    Column("actor", Text, nullable=False),
+    _ts("created_at"),
+))
+
 
 _SOURCES_TABLE = Table(
     "sources", metadata,
@@ -391,6 +414,21 @@ class PostgresMatchRepository(_Bound):
         if row is None:
             raise KeyError(observation_id)
         return _row(row)
+
+    async def list_run_observations(
+        self,
+        run_id: str,
+        *,
+        role: str = AUTHENTICATED_ROLE,
+    ) -> list:
+        _require_read(role)
+        table = TABLES["ingredient_observations"]
+        result = await self._conn.execute(
+            select(table)
+            .where(table.c.ocr_run_id == run_id)
+            .order_by(table.c.sequence_number)
+        )
+        return [_row(row) for row in result.all()]
 
     async def record_correction(
         self,
@@ -845,6 +883,7 @@ class _PostgresScope:
         self.verification = PostgresVerificationRepository(self._connection)
         self.reviews = PostgresReviewRepository(self._connection)
         self.entities = PostgresEntityRepository(self._connection)
+        self.ocr = PostgresOCRRepository(self._connection)
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> bool:
@@ -856,3 +895,57 @@ class _PostgresScope:
         finally:
             await self._connect_cm.__aexit__(exc_type, exc, tb)
         return False
+
+
+class PostgresOCRRepository(_Bound):
+    """Immutable OCR runs plus corrections (Postgres)."""
+
+    async def save_run(
+        self, row: dict, *, role: str = SERVICE_ROLE
+    ) -> str:
+        _require_write(role)
+        stmt = insert(TABLES["ocr_runs"]).values(**row)
+        stmt = stmt.on_conflict_do_nothing(index_elements=["id"])
+        await self._conn.execute(stmt)
+        return str(row["id"])
+
+    async def get_run(
+        self,
+        run_id: str,
+        *,
+        role: str = AUTHENTICATED_ROLE,
+    ) -> dict:
+        _require_read(role)
+        table = TABLES["ocr_runs"]
+        result = await self._conn.execute(
+            select(table).where(table.c.id == run_id)
+        )
+        row = result.first()
+        if row is None:
+            raise KeyError(run_id)
+        return _row(row)
+
+    async def save_correction(
+        self, row: dict, *, role: str = SERVICE_ROLE
+    ) -> str:
+        _require_write(role)
+        stmt = insert(TABLES["ocr_corrections"]).values(**row)
+        stmt = stmt.on_conflict_do_nothing(index_elements=["id"])
+        await self._conn.execute(stmt)
+        return str(row["id"])
+
+    async def get_correction(
+        self,
+        run_id: str,
+        *,
+        role: str = AUTHENTICATED_ROLE,
+    ) -> dict:
+        _require_read(role)
+        table = TABLES["ocr_corrections"]
+        result = await self._conn.execute(
+            select(table).where(table.c.ocr_run_id == run_id)
+        )
+        row = result.first()
+        if row is None:
+            raise KeyError(run_id)
+        return _row(row)

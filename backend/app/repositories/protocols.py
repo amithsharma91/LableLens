@@ -66,6 +66,14 @@ class MatchRepository(Protocol):
     ) -> dict:
         """Return one ingredient_observations row."""
 
+    async def list_run_observations(
+        self,
+        run_id: str,
+        *,
+        role: str = AUTHENTICATED_ROLE,
+    ) -> list:
+        """Return an OCR run's observations in sequence order."""
+
     async def record_correction(
         self,
         observation_id: str,
@@ -258,3 +266,38 @@ class EntityRepository(Protocol):
         self, *, role: str = AUTHENTICATED_ROLE
     ) -> list:
         """All alias rows ordered by id (registry projection)."""
+
+
+@runtime_checkable
+class OCRRepository(Protocol):
+    """Immutable OCR runs plus single-revision corrections.
+
+    Runs are append-only: a provider rerun inserts a new row, never
+    an update. Corrections are append-only rows with at most one
+    revision per run (UNIQUE on ocr_run_id, refused again in the
+    service layer).
+    """
+
+    async def save_run(self, row: dict, *, role: str = SERVICE_ROLE) -> str:
+        """Insert an ocr_runs row. Returns id."""
+
+    async def get_run(
+        self,
+        run_id: str,
+        *,
+        role: str = AUTHENTICATED_ROLE,
+    ) -> dict:
+        """Return one ocr_runs row."""
+
+    async def save_correction(
+        self, row: dict, *, role: str = SERVICE_ROLE
+    ) -> str:
+        """Insert an ocr_corrections row. Returns id."""
+
+    async def get_correction(
+        self,
+        run_id: str,
+        *,
+        role: str = AUTHENTICATED_ROLE,
+    ) -> dict:
+        """Return the correction row for one run."""

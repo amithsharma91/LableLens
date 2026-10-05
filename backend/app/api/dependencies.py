@@ -15,7 +15,12 @@ from starlette.requests import Request
 
 from app.api.errors import ApiError
 
-__all__ = ["services", "observation_service", "review_service"]
+__all__ = [
+    "services",
+    "observation_service",
+    "review_service",
+    "ocr_service",
+]
 
 
 def services(request: Request) -> SimpleNamespace:
@@ -41,3 +46,8 @@ def observation_service(request: Request):
 def review_service(request: Request):
     """The request-scoped review service."""
     return services(request).reviews
+
+
+def ocr_service(request: Request):
+    """The request-scoped OCR service."""
+    return services(request).ocr

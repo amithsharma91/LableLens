@@ -1,6 +1,6 @@
-"""Static validation of migration 003 (no live database needed).
+"""Static validation of migrations 003-004 (no live database needed).
 
-Asserts the migration declares every table/column/index/constraint/
+Asserts the migrations declare every table/column/index/constraint/
 policy the Postgres metadata layer expects, so schema drift fails
 fast in CI. Live application is covered separately and only when
 TEST_DATABASE_URL is set.
@@ -11,18 +11,32 @@ from pathlib import Path
 
 from app.repositories.postgres import TABLES
 
-MIGRATION = (
+MIGRATIONS = (
     Path(__file__).resolve().parents[4]
-    / "backend" / "migrations" / "003_verification_review.sql"
+    / "backend" / "migrations"
 )
 
 
 def _sql():
-    return MIGRATION.read_text()
+    return "\n".join(
+        (MIGRATIONS / name).read_text()
+        for name in (
+            "003_verification_review.sql",
+            "004_ocr_boundary.sql",
+        )
+    )
+
+
+def test_migration_files_exist():
+    for name in (
+        "003_verification_review.sql",
+        "004_ocr_boundary.sql",
+    ):
+        assert (MIGRATIONS / name).exists(), name
 
 
 def test_migration_file_exists():
-    assert MIGRATION.exists()
+    test_migration_files_exist()
 
 
 def test_all_metadata_tables_created():

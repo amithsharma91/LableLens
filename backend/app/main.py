@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.api.errors import RequestIdMiddleware, register_handlers
-from app.api.v1 import health, observations, reviews, verification
+from app.api.v1 import health, observations, ocr, reviews, verification
 from app.config import settings
 from app.services.observation_service import ObservationService
 from app.services.review_service import ReviewService
@@ -124,7 +124,7 @@ async def _load_pg_registry(engine):
     return projected
 
 
-def _postgres_factory(engine, registry, adapters):
+def _postgres_factory(engine, registry, adapters, ocr_providers=None):
     """Per-request connection + transaction scope (Postgres wiring)."""
     from contextlib import asynccontextmanager
 
@@ -133,9 +133,11 @@ def _postgres_factory(engine, registry, adapters):
         PostgresEntityRepository,
         PostgresEvidenceRepository,
         PostgresMatchRepository,
+        PostgresOCRRepository,
         PostgresReviewRepository,
         PostgresVerificationRepository,
     )
+    from app.services.ocr_service import OCRService
 
     @asynccontextmanager
     async def scope():
@@ -148,15 +150,22 @@ def _postgres_factory(engine, registry, adapters):
                     verification=PostgresVerificationRepository(connection),
                     reviews=PostgresReviewRepository(connection),
                     entities=PostgresEntityRepository(connection),
+                    ocr=PostgresOCRRepository(connection),
                 )
                 built_reviews = ReviewService(
                     repos, adapters=list(adapters))
+                built_observations = ObservationService(
+                    repos, registry=registry.registry,
+                    adapters=list(adapters),
+                    review_service=built_reviews)
                 yield SimpleNamespace(
-                    observations=ObservationService(
+                    observations=built_observations,
+                    reviews=built_reviews,
+                    ocr=OCRService(
                         repos, registry=registry.registry,
                         adapters=list(adapters),
+                        providers=ocr_providers,
                         review_service=built_reviews),
-                    reviews=built_reviews,
                 )
 
     return scope
@@ -197,6 +206,7 @@ def create_app(
     observation_service=None,
     engine=None,
     rate_limiter=None,
+    ocr_providers=None,
 ) -> FastAPI:
     """Build the FastAPI application with injected boundaries.
 
@@ -265,8 +275,11 @@ def create_app(
         )
         if engine is not None:
             application.state.service_factory = _postgres_factory(
-                engine, registry, local_adapters)
+                engine, registry, local_adapters,
+                ocr_providers=ocr_providers)
         else:
+            from app.services.ocr_service import OCRService
+
             built_reviews = review_service or ReviewService(
                 repos, adapters=local_adapters)
             built_observations = observation_service or ObservationService(
@@ -276,6 +289,11 @@ def create_app(
                 SimpleNamespace(
                     observations=built_observations,
                     reviews=built_reviews,
+                    ocr=OCRService(
+                        repos, registry=registry,
+                        adapters=local_adapters,
+                        providers=ocr_providers,
+                        review_service=built_reviews),
                 ))
     else:
         application.state.service_factory = None
@@ -284,6 +302,8 @@ def create_app(
                                tags=["health"])
     application.include_router(observations.router, prefix="/api/v1",
                                tags=["observations"])
+    application.include_router(ocr.router, prefix="/api/v1",
+                               tags=["ocr"])
     application.include_router(verification.router, prefix="/api/v1",
                                tags=["verification"])
     application.include_router(reviews.router, prefix="/api/v1",

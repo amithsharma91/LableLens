@@ -92,6 +92,7 @@ def _migrations():
             "001_initial_schema.sql",
             "002_seed_data.sql",
             "003_verification_review.sql",
+            "004_ocr_boundary.sql",
         )
     ]
 

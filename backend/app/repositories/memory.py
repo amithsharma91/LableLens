@@ -132,6 +132,22 @@ class MemoryMatchRepository:
             raise KeyError(observation_id)
         return copy.deepcopy(row)
 
+    async def list_run_observations(
+        self,
+        run_id: str,
+        *,
+        role: str = AUTHENTICATED_ROLE,
+    ) -> list:
+        _require_read(role)
+        rows = [
+            copy.deepcopy(row)
+            for row in self._store.table(
+                "ingredient_observations").values()
+            if row.get("ocr_run_id") == str(run_id)
+        ]
+        rows.sort(key=lambda row: row.get("sequence_number", 0))
+        return rows
+
     async def record_correction(
         self,
         observation_id: str,
@@ -505,6 +521,7 @@ class MemoryUnitOfWork:
         self.verification = MemoryVerificationRepository(store)
         self.reviews = MemoryReviewRepository(store)
         self.entities = MemoryEntityRepository(store)
+        self.ocr = MemoryOCRRepository(store)
         self._store = store
 
     @contextmanager
@@ -516,3 +533,50 @@ class MemoryUnitOfWork:
         except Exception:
             self._store.restore(snapshot)
             raise
+
+
+class MemoryOCRRepository:
+    """Immutable OCR runs plus corrections (memory)."""
+
+    def __init__(self, store: Optional[_Store] = None) -> None:
+        self._store = store or _Store()
+
+    async def save_run(
+        self, row: dict, *, role: str = SERVICE_ROLE
+    ) -> str:
+        _require_write(role)
+        return self._store.insert("ocr_runs", row)
+
+    async def get_run(
+        self,
+        run_id: str,
+        *,
+        role: str = AUTHENTICATED_ROLE,
+    ) -> dict:
+        _require_read(role)
+        try:
+            return copy.deepcopy(
+                self._store.table("ocr_runs")[str(run_id)])
+        except KeyError:
+            raise KeyError(run_id)
+
+    async def save_correction(
+        self, row: dict, *, role: str = SERVICE_ROLE
+    ) -> str:
+        _require_write(role)
+        parent = row["ocr_run_id"]
+        if parent not in self._store.table("ocr_runs"):
+            raise ValueError("ocr run %s missing" % parent)
+        return self._store.insert("ocr_corrections", row)
+
+    async def get_correction(
+        self,
+        run_id: str,
+        *,
+        role: str = AUTHENTICATED_ROLE,
+    ) -> dict:
+        _require_read(role)
+        for row in self._store.table("ocr_corrections").values():
+            if row.get("ocr_run_id") == str(run_id):
+                return copy.deepcopy(row)
+        raise KeyError(run_id)

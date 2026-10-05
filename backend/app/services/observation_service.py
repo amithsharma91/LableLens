@@ -94,6 +94,8 @@ class ObservationService:
         observation_id: Optional[str] = None,
         observation_ids: Optional[list] = None,
         source_type: str = "ocr",
+        ocr_run_id: Optional[str] = None,
+        ocr_confidence: Optional[float] = None,
         role: str = "service",
     ) -> dict:
         """Parse raw text and persist one observation per top-level node.
@@ -135,6 +137,8 @@ class ObservationService:
                     sequence_number=position,
                     raw_text=node.raw_text,
                     source_type=source_type,
+                    ocr_run_id=ocr_run_id,
+                    ocr_confidence=ocr_confidence,
                 ),
                 role=role,
             )
