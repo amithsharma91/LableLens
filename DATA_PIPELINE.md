@@ -183,6 +183,20 @@ The original OCR text is always stored alongside the correction. Corrections are
 - Do not treat a user-typed name as a verified chemical identity.
 - Do not skip entity resolution because the user "typed it correctly."
 
+### Stage-13 implementation note (2026-10-05)
+Stage 3 is implemented as `ObservationService.correct` (service
+layer only, no route): the original `raw_text` is immutable (moved
+to `original_text` on first correction), the corrected reading is
+stored in `display_text` with `user_corrected`, `correction_reason`,
+and the `user_corrected` source type, and a fresh normalization row
+is persisted for the corrected text so the pre-correction row stays
+as history. Analysis and reads use the latest normalization
+(`display_text or raw_text`). Exactly one revision per observation
+is allowed -- a second correction is refused, so there is no silent
+correction chain. Demonstrated on a documented real-label case
+(Listerine `Saccharin Sodium` -> `Sodium Saccharin`, both SPL
+readings cited) in `STAGE_13_REAL_LABEL_VERTICAL_SLICE.md`.
+
 ---
 
 ## Stage 4 — Normalization

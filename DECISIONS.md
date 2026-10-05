@@ -1132,3 +1132,80 @@ three operations that actually exist.
   the incident it was added for.
 - Adding a rate-limit table to the database: not required by the
   requirement, adds write contention to the paths being protected.
+
+---
+
+## ADR-028 — Real-Label Slice With Draft Fixtures (Stage 13)
+
+**Status:** Accepted
+**Date:** 2026-10-05
+
+### Context
+
+Stage 13 required real-label input, but the audit found zero usable
+ground truth: all 30 `LABEL_REGRESSION_DATASET.csv` rows are
+`needs_real_label` placeholders and all 100 golden rows are
+`needs_verification` seeds. Fabricating "realistic" labels was
+explicitly out of scope. Four genuinely sourced labels were
+transcribed instead (OFF OCR record, two FDA DailyMed SPL inactive
+paragraphs, one INCIDecoder INCI transcription with its weaker
+provenance marked). Full analysis in
+`STAGE_13_REAL_LABEL_VERTICAL_SLICE.md`.
+
+### Decision
+
+1. Fixtures live outside the two CSVs, carry cited sources with
+   retrieval dates and scope notes, and are marked
+   `review_status: "draft"` -- sourced, not yet independently
+   reviewed. A test pins both CSVs at zero verified rows.
+2. Expectations encode reviewed pipeline behavior, including honest
+   negatives: bare registered names verify only to provisional
+   (V3 single-source corroboration), the `glycerin` synonym gap
+   stays an unselected candidate (the approved names do not list
+   it), and generic terms, color additives, and unregistered
+   substances stay unresolved/unknown with no invented chemistry.
+3. The correction boundary is a service method, not a route:
+   `ObservationService.correct` keeps raw immutable, stores one
+   documented revision with reason, persists a fresh normalization
+   row, and refuses a second correction. Analysis/reads use
+   `display_text or raw_text`; `get_normalization_for_observation`
+   returns the latest row (identical for the single-row case).
+4. Reruns are stable by construction: caller-supplied observation
+   ids plus uuid5 normalization ids over observation + content, so
+   existing `ON CONFLICT DO NOTHING` / memory upsert semantics
+   reuse rows instead of duplicating them.
+5. The runner (`app/regression/`) is a test harness with a
+   developer-only CLI that exits non-zero on mismatch. No HTTP
+   endpoint, no frontend, no AI, no RDKit, no new providers, no new
+   tables or migrations; V1-V7, parser, normalizer, resolver, and
+   adapters are untouched.
+6. Two pre-existing behaviors were observed and deliberately left
+   alone: systematic IUPAC-style names are mangled by the Stage-4
+   normalizer, and `verification_events` rows are written only on
+   claim state change. Both are recorded as Stage-14 candidates,
+   not fixed under a regression stage.
+
+### Consequences
+
+- The data/chemistry trust path is proven on real label text with
+  persisted claims, decisions, evidence links, and an auditable
+  provenance chain in both backends.
+- Draft fixtures must pass independent review before they can ground
+  any stronger claim; the 4-label slice is a pipeline proof, never
+  a market sample, and its metrics carry no accuracy claim.
+- Unknown-expected ingredients receiving an entity is a hard
+  failure (false-positive count asserted at 0), so future registry
+  growth is automatically checked against over-resolution.
+
+**Rejected alternatives:**
+- Populating the placeholder CSV rows to "have ground truth": turns
+  unevidenced cells into fake authority.
+- Snapshot-recording pipeline output as expectations: asserts
+  nothing about correctness.
+- Promoting `glycerin` via a fixture-side alias: fixture truth
+  overriding the canonical registry.
+- Forcing all labels to `verified`: the sourced labels print no
+  identifiers, so verification would be theater.
+- A `PATCH /observations` route: the product has no frontend or
+  accounts yet; a route would add unaudited write surface for no
+  user.

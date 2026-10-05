@@ -712,3 +712,35 @@ A feature, fix, or release is not done until all of the following are true:
 - [ ] Performance benchmarks do not regress ≥20% at p95 (required for release tags only).
 - [ ] Full regression dataset passes (required for release tags only).
 - [ ] No test data is present in or connected to the production environment.
+
+### 6.5 Stage-13 Real-Label Slice (implemented 2026-10-05)
+
+The `LABEL_REGRESSION_DATASET.csv` rows are all still
+`needs_real_label` placeholders and the golden CSV is still
+`needs_verification` seed data, so neither can ground a test. The
+first executable slice lives separately and does not pretend
+otherwise:
+
+- Fixtures: `backend/app/regression/fixtures/real_labels/`
+  (`RL-13-01` Coca-Cola OFF OCR, `RL-13-02` Listerine DailyMed SPL,
+  `RL-13-03` Nivea Creme INCIDecoder transcription,
+  `RL-13-04` NyQuil DailyMed SPL), each with cited source,
+  retrieval date, scope note, per-ingredient expectations, and
+  `review_status: "draft"`.
+- Runner: `backend/app/regression/runner.py` (`run_label`) over the
+  unchanged service layer; `backend/app/cli/run_label_regression.py`
+  prints metrics and exits non-zero on mismatch (no HTTP endpoint).
+- Tests: `backend/app/tests/regression/` — slice expectations (19),
+  adversarial fixture handling (3), live-Postgres persistence (5).
+- Governance: a test asserts both CSVs still hold zero verified
+  rows, so placeholders can never be silently promoted to truth.
+
+Current slice metrics (50 ingredients): 4 exact matches, 2
+unselected candidates, 44 unresolved; 4 provisional, 46 unknown, 0
+verified, 0 conflicted, 0 entity-match false positives. Bare
+registered names verify only to provisional (single source cannot
+corroborate itself); the `glycerin` synonym gap, generic terms
+(alcohol, flavor, parfum), color additives, and all unregistered
+substances stay unresolved. The §12 gates are not applied to this
+4-label slice (it is a pipeline proof, not a market sample); the
+false-positive count is asserted at exactly 0.

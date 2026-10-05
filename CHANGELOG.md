@@ -138,6 +138,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     Postgres, 406 passed + 38 skipped without; import re-verified on
     a fresh database. Documented in
     `STAGE_12_PRODUCTION_READINESS.md`; ADR-025, ADR-026, ADR-027.
+- Stage-13 real-label deterministic vertical slice (V1–V7 untouched):
+  audited both dataset CSVs and found zero usable ground truth (30/30
+  placeholders, 100/100 unverified seeds; both files byte-unchanged,
+  pinned by test), then transcribed four genuinely sourced real
+  labels (Coca-Cola OFF OCR record, Listerine + NyQuil FDA DailyMed
+  SPL inactive paragraphs, Nivea Creme INCIDecoder INCI list with its
+  weaker provenance marked) into draft fixtures with cited sources,
+  scope notes, and per-ingredient reviewed expectations. New
+  `app/regression/` harness (`LabelInput`, `run_label`, metrics,
+  developer-only `run_label_regression` CLI, no endpoint): 50
+  ingredients, 4 exact matches, 2 unselected candidates, 44
+  unresolved; 4 provisional, 46 unknown, 0 verified, 0 conflicted, 0
+  entity-match false positives. Additive service-layer correction
+  boundary (`ObservationService.correct` + repository
+  `record_correction`, one documented revision, raw immutable,
+  latest-normalization-wins, deterministic rerun ids); parser,
+  normalizer, resolver, adapters, and registry import untouched.
+  Tests: 27 new (19 slice, 3 adversarial, 5 live-Postgres proving
+  persisted observations/normalizations/candidates/matches/decisions/
+  claims/sources with audit rows intact). 471/471 passing with live
+  DB (428 passed + 43 skipped without). Documented in
+  `STAGE_13_REAL_LABEL_VERTICAL_SLICE.md`; ADR-028.
 
 ### Fixed
 - `entity_matches.selected_at` and `claim_sources.retrieved_at`
