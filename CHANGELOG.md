@@ -81,6 +81,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Protocols with in-memory and Postgres/Supabase implementations,
   deterministic serialization, `backend/.env.example` placeholders.
   Live-validated against real Postgres 18. 247/247 passing.
+- Stage-11 authenticated API boundary (V1–V7 untouched): FastAPI
+  factory with bearer principals and reviewer role, observation/
+  candidate/verification/claim/review endpoints per the spec
+  envelopes, identity-only review scope, stale-evidence 409s,
+  match-scoped verification IDs, process-scoped review IDs, envelope
+  errors, request-ID correlation, OpenAPI error documentation, and a
+  service layer + service-scope middleware so Postgres runs one
+  connection/transaction per request on the serving event loop.
+  289/289 passing with live DB (276 passed + 13 skipped without).
+  Documented in `STAGE_11_API.md`; ADR-024.
+
+### Fixed
+- `entity_matches.selected_at` and `claim_sources.retrieved_at`
+  serialize as real datetimes (asyncpg binds TIMESTAMPTZ strictly;
+  unparseable evidence timestamps become NULL, never a fabricated
+  instant).
+- Analysis responses projected non-existent resolution keys, so
+  `resolution.entity` and `match_status` were always empty; they now
+  come from `Resolution.to_dict()`.
+- Persisted review events are replayed into the hydrated queue before
+  transitions, so decision events no longer reuse a positional event
+  id and get deduplicated away (decisions were recorded without an
+  audit event).
+- `test_seed_repair_present` asserts the seeded source rows by
+  identity instead of an exact count, since the service legitimately
+  registers adapter provenance sources on demand.
 
 ### Fixed
 - Parser strips a leading `Ingredients:` label header (per `DATA_PIPELINE.md`

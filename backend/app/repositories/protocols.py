@@ -45,6 +45,14 @@ class MatchRepository(Protocol):
     ) -> dict:
         """Return observation + normalization + candidates + match."""
 
+    async def get_normalization_for_observation(
+        self,
+        observation_id: str,
+        *,
+        role: str = AUTHENTICATED_ROLE,
+    ) -> dict:
+        """Return the normalization row for one observation."""
+
 
 @runtime_checkable
 class ClaimRepository(Protocol):
@@ -93,6 +101,14 @@ class EvidenceRepository(Protocol):
         role: str = AUTHENTICATED_ROLE,
     ) -> list:
         """Return evidence links for one claim."""
+
+    async def get_source(
+        self,
+        source_id: str,
+        *,
+        role: str = AUTHENTICATED_ROLE,
+    ) -> dict:
+        """Return one source registry row by id."""
 
 
 @runtime_checkable
@@ -169,3 +185,23 @@ class ReviewRepository(Protocol):
         role: str = AUTHENTICATED_ROLE,
     ) -> list:
         """Return a review's events in recorded order."""
+
+
+@runtime_checkable
+class EntityRepository(Protocol):
+    """Canonical entity existence/lookup (read-only).
+
+    `chemical_entities` is the authority on which canonical entities
+    exist. Claims link to it by foreign key, so the service checks
+    existence before persisting a decision that names an entity.
+    Registration of new entities is a service-role operation with no
+    API route in this stage.
+    """
+
+    async def get_entity(
+        self,
+        entity_id: str,
+        *,
+        role: str = AUTHENTICATED_ROLE,
+    ) -> dict:
+        """Return one chemical_entities row by id."""

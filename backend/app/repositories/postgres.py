@@ -19,6 +19,7 @@ from typing import Optional
 from sqlalchemy import (
     NUMERIC,
     TIMESTAMP,
+    BigInteger,
     Boolean,
     Column,
     Date,
@@ -196,6 +197,7 @@ _register(Table(
     Column("reason", Text),
     Column("warnings", JSONB),
     Column("gate_results", JSONB),
+    Column("claim_ids", JSONB),
     _ts("created_at"),
 ))
 
@@ -257,6 +259,26 @@ _SOURCES_TABLE = Table(
     extend_existing=True,
 )
 
+_ENTITIES_TABLE = Table(
+    "chemical_entities", metadata,
+    Column("id", PG_UUID(as_uuid=False), primary_key=True),
+    Column("preferred_name", Text),
+    Column("entity_type", Text),
+    Column("representation_type", Text),
+    Column("status", Text),
+    Column("formula", Text),
+    Column("molecular_weight", NUMERIC),
+    Column("cas_number", Text),
+    Column("pubchem_cid", BigInteger),
+    Column("chebi_id", Text),
+    Column("inchi", Text),
+    Column("inchikey", Text),
+    Column("smiles", Text),
+    Column("chemical_class", Text),
+    Column("structure_status", Text),
+    extend_existing=True,
+)
+
 
 def _require_write(role: str) -> None:
     if role != SERVICE_ROLE:
@@ -312,6 +334,22 @@ class PostgresMatchRepository(_Bound):
         stmt = stmt.on_conflict_do_nothing(index_elements=["id"])
         await self._conn.execute(stmt)
         return str(row["id"])
+
+    async def get_normalization_for_observation(
+        self,
+        observation_id: str,
+        *,
+        role: str = AUTHENTICATED_ROLE,
+    ) -> dict:
+        _require_read(role)
+        norms = TABLES["ingredient_normalizations"]
+        result = await self._conn.execute(
+            select(norms).where(norms.c.observation_id == observation_id)
+        )
+        row = result.first()
+        if row is None:
+            raise KeyError(observation_id)
+        return _row(row)
 
     async def get_chain(
         self,
@@ -455,6 +493,42 @@ class PostgresEvidenceRepository(_Bound):
             select(links).where(links.c.claim_id == claim_id)
         )
         return [_row(r) for r in result.all()]
+
+    async def get_source(
+        self,
+        source_id: str,
+        *,
+        role: str = AUTHENTICATED_ROLE,
+    ) -> dict:
+        _require_read(role)
+        result = await self._conn.execute(
+            select(_SOURCES_TABLE).where(
+                _SOURCES_TABLE.c.id == source_id)
+        )
+        row = result.first()
+        if row is None:
+            raise KeyError(source_id)
+        return _row(row)
+
+
+class PostgresEntityRepository(_Bound):
+    """Canonical entity existence checks (Postgres, read-only)."""
+
+    async def get_entity(
+        self,
+        entity_id: str,
+        *,
+        role: str = AUTHENTICATED_ROLE,
+    ) -> dict:
+        _require_read(role)
+        result = await self._conn.execute(
+            select(_ENTITIES_TABLE).where(
+                _ENTITIES_TABLE.c.id == entity_id)
+        )
+        row = result.first()
+        if row is None:
+            raise KeyError(entity_id)
+        return _row(row)
 
 
 class PostgresVerificationRepository(_Bound):
@@ -660,6 +734,7 @@ class _PostgresScope:
         self.evidence = PostgresEvidenceRepository(self._connection)
         self.verification = PostgresVerificationRepository(self._connection)
         self.reviews = PostgresReviewRepository(self._connection)
+        self.entities = PostgresEntityRepository(self._connection)
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> bool:

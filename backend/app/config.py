@@ -14,6 +14,10 @@ class Settings(BaseSettings):
         "postgresql+asyncpg://postgres:postgres@localhost:5432/labellens"
     )
 
+    snapshot_path: str = os.getenv("SNAPSHOT_PATH", "")
+
+    dev_api_tokens: str = os.getenv("DEV_API_TOKENS", "")
+
     version: str = "0.1.0"
 
     model_config = SettingsConfigDict(

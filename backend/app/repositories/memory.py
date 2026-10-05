@@ -22,6 +22,7 @@ from app.repositories.protocols import (
 __all__ = [
     "ReviewClaimConflict",
     "DuplicateRow",
+    "MemoryEntityRepository",
     "MemoryMatchRepository",
     "MemoryClaimRepository",
     "MemoryEvidenceRepository",
@@ -101,6 +102,18 @@ class MemoryMatchRepository:
         if parent not in self._store.table("ingredient_normalizations"):
             raise ValueError("normalization %s missing" % parent)
         return self._store.insert("entity_matches", row)
+
+    async def get_normalization_for_observation(
+        self,
+        observation_id: str,
+        *,
+        role: str = AUTHENTICATED_ROLE,
+    ) -> dict:
+        _require_read(role)
+        for row in self._store.table("ingredient_normalizations").values():
+            if row.get("observation_id") == observation_id:
+                return copy.deepcopy(row)
+        raise KeyError(observation_id)
 
     async def get_chain(
         self,
@@ -219,6 +232,43 @@ class MemoryEvidenceRepository:
             for r in self._store.table("claim_sources").values()
             if r["claim_id"] == claim_id
         ]
+
+    async def get_source(
+        self,
+        source_id: str,
+        *,
+        role: str = AUTHENTICATED_ROLE,
+    ) -> dict:
+        _require_read(role)
+        try:
+            return copy.deepcopy(
+                self._store.table("sources")[source_id])
+        except KeyError:
+            raise KeyError(source_id)
+
+
+class MemoryEntityRepository:
+    """Canonical entity existence checks (memory, read-only)."""
+
+    def __init__(self, store: Optional[_Store] = None) -> None:
+        self._store = store or _Store()
+
+    async def get_entity(
+        self,
+        entity_id: str,
+        *,
+        role: str = AUTHENTICATED_ROLE,
+    ) -> dict:
+        _require_read(role)
+        try:
+            return copy.deepcopy(
+                self._store.table("chemical_entities")[entity_id])
+        except KeyError:
+            raise KeyError(entity_id)
+
+    def register(self, row: dict) -> str:
+        """Seed a canonical entity row (test/registry bootstrap only)."""
+        return self._store.insert("chemical_entities", row)
 
 
 class MemoryVerificationRepository:
@@ -386,6 +436,7 @@ class MemoryUnitOfWork:
         self.evidence = MemoryEvidenceRepository(store)
         self.verification = MemoryVerificationRepository(store)
         self.reviews = MemoryReviewRepository(store)
+        self.entities = MemoryEntityRepository(store)
         self._store = store
 
     @contextmanager

@@ -191,6 +191,7 @@ CREATE TABLE IF NOT EXISTS verification_decisions (
     reason TEXT NULL,
     warnings JSONB NULL,
     gate_results JSONB NULL,
+    claim_ids JSONB NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

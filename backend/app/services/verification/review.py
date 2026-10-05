@@ -579,6 +579,61 @@ class ReviewQueue:
         """Return a queued item by ID."""
         return self._require(review_id)
 
+    @classmethod
+    def hydrate(
+        cls, rows: list, events: Optional[list] = None
+    ) -> "ReviewQueue":
+        """Rebuild queue state from persisted review rows.
+
+        Used by the service layer to validate transitions against
+        stored truth. Persisted events are replayed too: event IDs are
+        positional (`<review>:<seq>`), so without the existing history
+        a new event would reuse an ID and be deduplicated away -- the
+        audit trail would silently lose transitions.
+        """
+        import time as _time
+
+        queue = cls(clock=_time.time)
+        for row in events or []:
+            queue._events.append(ReviewEvent(
+                event_id=str(row.get("id", "")),
+                review_id=str(row.get("review_id", "")),
+                event_type=row.get("event_type", ""),
+                timestamp=0.0,
+                actor=row.get("actor", ""),
+                reason=row.get("reason", ""),
+                previous_state=row.get("previous_state") or "",
+                new_state=row.get("new_state", ""),
+                evidence_context_hash=row.get("evidence_context_hash", ""),
+                rules_version=row.get("rules_version", ""),
+                snapshot_version=row.get("snapshot_version", ""),
+            ))
+        for row in rows:
+            item = ReviewItem(
+                review_id=row["id"],
+                candidate_key=row.get("candidate_key", ""),
+                raw_text=row.get("raw_text", ""),
+                normalized_text=row.get("normalized_text", ""),
+                identifier=row.get("identifier"),
+                resolution=dict(row.get("resolution") or {}),
+                verification_status=row.get("verification_status", ""),
+                verification_summary={},
+                evidence_context=dict(row.get("evidence_context") or {}),
+                evidence_hash=row.get("evidence_hash", ""),
+                priority=int(row.get("priority", 99)),
+                status=row.get("status", REVIEW_QUEUED),
+                created_at=0.0,
+                updated_at=0.0,
+                reviewer=row.get("reviewer"),
+            )
+            queue._items[item.review_id] = item
+            try:
+                seq = int(item.review_id.split("-")[1])
+            except (IndexError, ValueError):
+                seq = 0
+            queue._seq = max(queue._seq, seq)
+        return queue
+
     def events_for(self, review_id: str) -> List[ReviewEvent]:
         """Append-only history for one review, in recorded order."""
         self._require(review_id)

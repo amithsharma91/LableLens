@@ -1,5 +1,7 @@
 """Serialization round-trip tests (no database needed)."""
 
+import datetime
+
 from app.repositories.serialize import (
     candidate_rows,
     claim_from_row,
@@ -85,7 +87,13 @@ def test_claim_source_row_metadata():
     assert row["support_type"] == "direct"
     assert row["source_value"] == "C6H8O7"
     assert row["response_hash"] == "ab12"
-    assert row["retrieved_at"] == "2026-10-05T00:00:00Z"
+    # Date-only evidence timestamps widen to midnight UTC and bind as
+    # real datetimes (asyncpg rejects timestamp strings).
+    assert row["retrieved_at"] == datetime.datetime(
+        2026, 10, 5, tzinfo=datetime.timezone.utc)
+    assert claim_source_row(
+        "c1", "s1", evidence, response_hash="ab12")["retrieved_at"] \
+        == row["retrieved_at"]
 
 
 def test_review_rows_preserve_history_inputs():

@@ -168,6 +168,16 @@ User → Next.js frontend
 - **Canonical chemistry write operations** (adding/modifying verified chemical entities, approving source metadata, taxonomy changes) are restricted to server-side or admin-only code paths. No authenticated end-user can trigger these directly.
 - **Privilege escalation paths are explicit.** Admin/service-level operations require a separate credential check beyond the standard user session.
 
+### Stage-11 API Boundary (implemented 2026-10-05)
+
+- Bearer tokens map to typed principals (`subject`, `reviewer`|`authenticated` role) via a verifier interface. Development/tests use an explicit static map (`DEV_API_TOKENS`); Supabase JWT verification is the documented production path (not yet implemented).
+- Reviewer identity is derived as `human:{subject}` server-side; request bodies cannot assert `reviewer`/`actor` (rejected as unknown fields).
+- Reads require authentication; review claim/decision require the reviewer role (403 otherwise). No anonymous access exists yet.
+- Request correlation IDs are issued/echoed (`X-Request-ID`); logs carry endpoint/subject/outcome/category only -- never tokens, labels, or secrets.
+- Error responses follow the API envelope and never leak stack traces, SQL, provider payloads, or credentials.
+- Data routes require an injected repository boundary; an app assembled without one answers health and fails data routes with a controlled 500 rather than an unhandled error.
+- Canonical entities are never created by the API: a decision naming an unregistered entity is rejected (422 `ENTITY_NOT_FOUND`) before any write, so the claim foreign key is enforced in application code and by the database.
+
 ---
 
 ## 5. Row-Level Security Strategy

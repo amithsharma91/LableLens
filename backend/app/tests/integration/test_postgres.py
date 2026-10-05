@@ -116,10 +116,27 @@ def uow(migrated):
 
 @needs_db
 def test_seed_repair_present(uow):
+    """Every seeded source row survived migration application.
+
+    Asserted by identity, not by total: the service legitimately
+    registers additional sources on demand (an evidence adapter's own
+    provenance, e.g. the immutable snapshot), so an exact count would
+    assert an implementation accident rather than seed integrity.
+    """
+    seeded = (
+        "PUBCHEM", "CHEBI", "NIST_WEBBOOK", "RDKIT", "FSSAI_FOOD_REGS",
+        "CODEX_GSFA", "EU_FOOD_ADDITIVES", "FDA_FOOD_ADDITIVES",
+        "EU_COSING",
+    )
+
     async def go():
         rows = await uow.evidence._conn.execute(
-            _text("SELECT count(*) FROM sources"))
-        assert rows.scalar() == 9
+            _text("SELECT name, status FROM sources WHERE name = ANY(:names)"),
+            {"names": list(seeded)},
+        )
+        found = {row.name: row.status for row in rows}
+        assert set(found) == set(seeded)
+        assert set(found.values()) <= {"approved", "conditional"}
 
     _await(go())
 

@@ -73,6 +73,12 @@ async def test_verification_id_deterministic():
     first = verification_id_for("k|", "verified", "1.0.0", "v1", "h")
     assert first == verification_id_for("k|", "verified", "1.0.0", "v1", "h")
     assert first != verification_id_for("k|", "provisional", "1.0.0", "v1", "h")
+    assert verification_id_for(
+        "k|", "verified", "1.0.0", "v1", "h", "m1") == verification_id_for(
+        "k|", "verified", "1.0.0", "v1", "h", "m1")
+    assert verification_id_for(
+        "k|", "verified", "1.0.0", "v1", "h", "m1") != verification_id_for(
+        "k|", "verified", "1.0.0", "v1", "h", "m2")
 
 
 async def test_claim_statuses_stay_independent():

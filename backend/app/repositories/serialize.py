@@ -78,14 +78,21 @@ def verification_id_for(
     rules_version: str,
     snapshot_version: str,
     evidence_hash: str,
+    match_id: str = "",
 ) -> str:
-    """Deterministic decision ID: same inputs always collide."""
+    """Deterministic decision ID: same inputs always collide.
+
+    The match ID is part of the identity: two analyses of identical
+    text are different match contexts and must not share one row.
+    Re-analysis of the same match stays idempotent.
+    """
     return str(
         uuid.uuid5(
             uuid.NAMESPACE_URL,
             "|".join([
                 "verification", candidate_key, status,
                 rules_version, snapshot_version, evidence_hash,
+                match_id,
             ]),
         )
     )
@@ -237,6 +244,27 @@ def claim_from_row(row: dict) -> dict:
     }
 
 
+def _timestamp(value: object) -> Optional[datetime.datetime]:
+    """Coerce evidence timestamps to datetimes for TIMESTAMPTZ binds.
+
+    asyncpg binds timestamp parameters strictly and rejects strings, so
+    date-only values are widened to midnight UTC and anything
+    unparseable becomes NULL rather than a fabricated instant.
+    """
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime.datetime):
+        return value
+    text = str(value)
+    try:
+        if len(text) == 10:
+            return datetime.datetime.strptime(
+                text, "%Y-%m-%d").replace(tzinfo=datetime.timezone.utc)
+        return datetime.datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
 def claim_source_row(
     claim_id: str,
     source_id: str,
@@ -249,8 +277,6 @@ def claim_source_row(
     retrieved = (
         getattr(source, "retrieved_at", "") if source is not None else ""
     ) or getattr(evidence, "retrieved_at", "") or ""
-    if len(retrieved) == 10:
-        retrieved += "T00:00:00Z"
     value = getattr(evidence, "value", None)
     if value is None:
         value = getattr(evidence, "source_value", "")
@@ -265,7 +291,7 @@ def claim_source_row(
         "review_notes": None,
         "provider": getattr(evidence, "provider", ""),
         "source_version": getattr(evidence, "source_version", "") or None,
-        "retrieved_at": retrieved or None,
+        "retrieved_at": _timestamp(retrieved),
         "response_hash": response_hash,
     }
 
@@ -439,8 +465,9 @@ def match_row(
         "match_status": resolution.status,
         "identity_confidence": resolution.identity_confidence,
         "selected_by": selected_by,
-        "selected_at": datetime.datetime.now(
-            datetime.timezone.utc).isoformat(),
+        # Real datetime (not an ISO string): asyncpg binds TIMESTAMPTZ
+        # parameters strictly and rejects strings.
+        "selected_at": datetime.datetime.now(datetime.timezone.utc),
         "reason_code": "; ".join(resolution.methods or []),
         "review_status": None,
         "review_notes": None,

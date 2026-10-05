@@ -2710,3 +2710,39 @@ Do not start with the most complex AI feature.
 # 99. Final API Principle
 
 > **The LabelLens API should make the correct path easy and the hallucinated path difficult: observations stay observations, candidates stay candidates, verified chemistry stays evidence-backed, computations stay reproducible, and AI stays an explanation layer rather than an authority.**
+
+---
+
+# 100. Stage-11 Implemented Boundary (2026-10-05)
+
+Implemented and tested (no scans/products/OCR yet; those sections remain future):
+
+```text
+POST /api/v1/observations                    create (raw verbatim, 201)
+GET  /api/v1/observations/{id}               retrieve + tree
+POST /api/v1/observations/{id}/analyze       resolve + verify + persist
+GET  /api/v1/observations/{id}/candidates    resolution view
+GET  /api/v1/observations/{id}/resolution    same view (spec-name alias)
+GET  /api/v1/observations/{id}/verification  decision + claims + evidence + history
+GET  /api/v1/claims/{id}                      claim + evidence links
+GET  /api/v1/reviews/pending                  bounded pagination (default 20, max 100)
+GET  /api/v1/reviews/{id}                     review + event history
+POST /api/v1/reviews/{id}/claim               reviewer from authentication
+POST /api/v1/reviews/{id}/decision             validated, re-verified via V1-V7
+```
+
+Authentication: `Authorization: Bearer <token>` -> typed principal
+(subject/role); development uses an explicit static map
+(`DEV_API_TOKENS`), production will use Supabase JWT verification
+(documented future, not implemented). Reviewer identity is derived
+as `human:{subject}`; request bodies cannot assert identity.
+Approval scope is identity-only (schema-enforced, 422 otherwise).
+Errors follow the §6 envelope with spec §7 codes; request IDs are
+echoed (`X-Request-ID`). No PUT/DELETE routes exist; events are
+read-only. Default production registry is empty (all candidates
+unresolved until a verified registry is registered).
+
+Canonical-entity prerequisite: `analyze` and `decision` fail with
+422 `ENTITY_NOT_FOUND` when the decision names an entity that is not
+present in `chemical_entities`. Registering entities is a service-role
+import with no route (the API never creates chemistry).

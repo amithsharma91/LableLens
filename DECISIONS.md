@@ -811,3 +811,67 @@ but absent from `DATABASE_SCHEMA.md`. Full analysis in
 - Storing raw provider payloads: unbounded growth and PII/secret
   risk; hashes + locators + extracted evidence instead.
 - Rewriting 001/002 history: unnecessary; additive repair only.
+
+---
+
+## ADR-024 — API as Authenticated Adapter (Stage 11)
+
+**Status:** Accepted
+**Date:** 2026-10-05
+
+### Context
+
+The persisted verification path needed a callable backend surface
+without leaking domain authority into routes or inventing
+production identity prematurely. Full analysis in
+`STAGE_11_API.md`; endpoint contracts in `API_SPEC.md` §100.
+
+### Decision
+
+1. Routes are adapters only: typed principal in, validated service
+   command, domain service, repository. No SQL, chemistry,
+   verification, or review rules in routes.
+2. Bearer tokens map to principals via a `TokenVerifier` interface;
+   reviewer identity derives server-side (`human:{subject}`).
+   Development/tests use an explicit static map; Supabase JWT is
+   the documented (not implemented) production verifier.
+3. Review scope stays identity-only (schema-enforced 422);
+   stale evidence fails closed (409); verification IDs are
+   match-scoped so identical text on different matches never
+   shares a decision row; review IDs are process-scoped with a
+   persisted-id collision probe.
+4. Errors use the spec envelope with spec codes; request IDs
+   correlate logs without carrying secrets.
+5. Services are bound per request by middleware, not stored on
+   `app.state`: Postgres opens one connection and one transaction per
+   request on the serving event loop, so connections never cross
+   loops and a multi-write operation commits or rolls back as one
+   scope. Memory bundles are shared but never mutated outside a
+   transaction scope.
+6. A decision naming a canonical entity is only persisted when
+   `chemical_entities` actually contains that entity (checked before
+   any write, 422 `ENTITY_NOT_FOUND` otherwise). Entity registration
+   is a service-role import with no route -- the API never creates
+   chemistry.
+
+### Consequences
+
+- Future Supabase JWT support swaps the verifier only; routes,
+  services, and tests keep their contracts.
+- Tests must register the canonical entities their evidence names
+  (offline store seed, live `chemical_entities` rows) before a
+  verified decision can persist. That is the real integration
+  prerequisite, now asserted instead of assumed.
+- Live production still requires JWT verification, per-user row
+  scoping, rate limiting, and a declared frontend origin -- all
+  recorded as deferred, none claimed done.
+
+**Rejected alternatives:**
+- Client-supplied reviewer identity: unauditable impersonation.
+- Generic 400/500 errors: unactionable clients and leaked internals.
+- Auto-verifying analyze results into reviews without routing:
+  bypasses the Stage-9 lifecycle.
+- Long-lived app-scoped database connection: loop affinity bugs and
+  no atomic scope per operation.
+- Writing claims with a null entity link when the entity is
+  unknown: silently drops provenance the record exists to carry.
