@@ -62,8 +62,13 @@ from app.services.verification.models import (
     SourceRecord,
     VerificationDecision,
 )
+from app.services.verification.review import (
+    ReviewSelection,
+    candidate_key_for,
+    current_context_hash,
+)
 
-__all__ = ["verify_candidate", "ORCHESTRATOR_VERSION"]
+__all__ = ["verify_candidate", "reverify_candidate", "ORCHESTRATOR_VERSION"]
 
 ORCHESTRATOR_VERSION = "1.0.0"
 
@@ -112,16 +117,118 @@ def verify_candidate(
 ) -> VerificationDecision:
     """Verify one Stage-5 resolution against an adapter's records."""
     records = adapter.lookup_identity(resolution) or []
-    admissible = filter_admissible(records)
-    warnings: List[str] = list(resolution.warnings)
-    drain = getattr(adapter, "drain_notices", None)
-    if callable(drain):
-        warnings.extend(drain())
-    field_conflicts = detect_conflicts(admissible)
+    return _decide(
+        resolution_status=resolution.status,
+        normalized_text=resolution.normalized_text or "",
+        candidate_identifier=resolution.identifier,
+        candidate_type=_candidate_type(resolution),
+        records=records,
+        adapter=adapter,
+        context=context,
+        human_disambiguation=human_disambiguation,
+        extra_warnings=tuple(resolution.warnings),
+    )
+
+
+def reverify_candidate(
+    resolution: Resolution,
+    adapter: VerificationSource,
+    selection: ReviewSelection,
+    *,
+    context: Optional[str] = None,
+) -> VerificationDecision:
+    """Re-verify after an approved human review selection.
+
+    The selection must match the current candidate (key), name one of
+    its candidates, and carry the hash of the evidence under review.
+    Fresh evidence is fetched and hashed identically: any material
+    change rejects the stale selection instead of reusing the old
+    approval. The frozen gate still decides; human judgment only
+    disambiguates and corrects identifier/type inputs.
+    """
+    key = candidate_key_for(
+        resolution.normalized_text or "", resolution.identifier
+    )
+    if selection.candidate_key != key:
+        raise ValueError(
+            "selection targets a different candidate; re-resolve first"
+        )
+    refs = {
+        c.candidate_ref
+        for c in ([resolution.selected_candidate] + list(resolution.candidates))
+        if c is not None
+    }
+    if selection.selected_candidate_ref not in refs:
+        raise ValueError("selection is not among resolution candidates")
+    records = adapter.lookup_identity(resolution) or []
+    fresh_hash = current_context_hash(
+        key,
+        records,
+        snapshot_version=getattr(adapter, "snapshot_version", ""),
+        rules_version=VERIFICATION_RULES_VERSION,
+    )
+    if fresh_hash != selection.evidence_context_hash:
+        raise ValueError(
+            "evidence changed since review; re-review required"
+        )
+    chosen = next(
+        c
+        for c in ([resolution.selected_candidate] + list(resolution.candidates))
+        if c is not None
+        and c.candidate_ref == selection.selected_candidate_ref
+    )
+    review_note = "human_review %s by %s: selected %s" % (
+        selection.review_id,
+        selection.reviewer,
+        selection.selected_candidate_ref,
+    )
+    effective_text = _swap_code(
+        resolution.normalized_text or "",
+        resolution.identifier,
+        selection.corrected_identifier,
+    )
+    return _decide(
+        resolution_status=resolution.status,
+        normalized_text=effective_text,
+        candidate_identifier=(
+            selection.corrected_identifier or resolution.identifier
+        ),
+        candidate_type=(
+            selection.corrected_type or chosen.candidate_type
+        ),
+        records=records,
+        adapter=adapter,
+        context=selection.context or context,
+        human_disambiguation=True,
+        extra_warnings=tuple(resolution.warnings) + (review_note,),
+    )
+
+
+def _swap_code(text: str, old: Optional[str], new: Optional[str]) -> str:
+    """Substitute a reviewer-corrected identifier token in place.
+
+    The printed code was judged wrong; the corrected code is the new
+    claim. Name-key derivation then sees a clean name. If the old
+    token is absent, text is returned unchanged (the gate will judge
+    the result honestly).
+    """
+    import re as _re
+
+    if not old or not new:
+        return text
+    want = _re.sub(r"[\s\-.]+", "", old.strip().upper())
+    pattern = _re.compile(r"\b(?:INS|E|CI)\s*-?\s*\d+[a-z]?\b", _re.I)
+    for match in pattern.finditer(text):
+        if _re.sub(r"[\s\-.]+", "", match.group(0).upper()) == want:
+            return text[: match.start()] + new + text[match.end():]
+    return text
+
+
+def _candidate_type(resolution: Resolution) -> str:
     key_candidates = [resolution.selected_candidate] + list(
         resolution.candidates
     )
-    candidate_type = next(
+    return next(
         (
             c.candidate_type
             for c in key_candidates
@@ -129,10 +236,30 @@ def verify_candidate(
         ),
         "unknown",
     )
+
+
+def _decide(
+    *,
+    resolution_status: str,
+    normalized_text: str,
+    candidate_identifier: Optional[str],
+    candidate_type: str,
+    records: list,
+    adapter: VerificationSource,
+    context: Optional[str],
+    human_disambiguation: bool,
+    extra_warnings: tuple,
+) -> VerificationDecision:
+    admissible = filter_admissible(records)
+    warnings: List[str] = list(extra_warnings)
+    drain = getattr(adapter, "drain_notices", None)
+    if callable(drain):
+        warnings.extend(drain())
+    field_conflicts = detect_conflicts(admissible)
     results = evaluate_gate(
-        resolution_status=resolution.status,
-        normalized_text=resolution.normalized_text or "",
-        candidate_identifier=resolution.identifier,
+        resolution_status=resolution_status,
+        normalized_text=normalized_text,
+        candidate_identifier=candidate_identifier,
         candidate_type=candidate_type,
         records=records,
         context=context,
@@ -204,7 +331,7 @@ def verify_candidate(
         return _with_field_claims(decision, agreed)
 
     v1 = by_rule["V1_admissible_candidate"]
-    if v1.result == FAIL and resolution.status == "ambiguous":
+    if v1.result == FAIL and resolution_status == "ambiguous":
         return decide(
             STATUS_PROVISIONAL,
             CONF_LOW,
@@ -220,9 +347,13 @@ def verify_candidate(
     v3 = by_rule["V3_identity_agreement"]
     v4 = by_rule["V4_identifier_validation"]
     contradictory = v3.result == FAIL and (
-        _has_identifier_conflict(resolution, admissible)
+        _has_identifier_conflict(
+            normalized_text, candidate_identifier, admissible
+        )
     )
-    if v4.result == FAIL and _explicit_mismatch(resolution, admissible):
+    if v4.result == FAIL and _explicit_mismatch(
+        normalized_text, candidate_identifier, admissible
+    ):
         contradictory = True
     if contradictory:
         return decide(
@@ -270,13 +401,17 @@ def name_agreeing_all(
 
 
 def _has_identifier_conflict(
-    resolution: Resolution, records: Sequence[SourceRecord]
+    normalized_text: str,
+    identifier: Optional[str],
+    records: Sequence[SourceRecord],
 ) -> bool:
-    return _explicit_mismatch(resolution, records)
+    return _explicit_mismatch(normalized_text, identifier, records)
 
 
 def _explicit_mismatch(
-    resolution: Resolution, records: Sequence[SourceRecord]
+    normalized_text: str,
+    identifier: Optional[str],
+    records: Sequence[SourceRecord],
 ) -> bool:
     """True when two claims genuinely disagree (not merely absent).
 
@@ -284,16 +419,14 @@ def _explicit_mismatch(
     the name is agreed by other record(s), with no record agreeing on
     both. Absence of evidence on either side is not a mismatch.
     """
-    if not resolution.identifier:
+    if not identifier:
         return False
     from app.services.verification.gate import derive_name_key
 
-    key = derive_name_key(
-        resolution.normalized_text or "", resolution.identifier
-    )
+    key = derive_name_key(normalized_text or "", identifier)
     id_ids = {
         r.entity.entity_id
-        for r in identifier_agreeing(resolution.identifier, records)
+        for r in identifier_agreeing(identifier, records)
     }
     name_ids = {
         r.entity.entity_id for r in name_agreeing(key, records)
