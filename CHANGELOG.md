@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `IMPLEMENTATION_AUDIT.md` — full repository reality audit. Key finding: the
+  Vite/React prototype described in the master brief is not present in this
+  checkout (`frontend/` holds only empty dirs; no parser/services/UI code exists).
+  Audit records framework/runtime/deps, feature status for all major features,
+  scan-pipeline trace (health endpoint only), and the prioritized build-out plan.
+- Canonical hierarchical ingredient parser
+  (`backend/app/services/ingredient_parser.py`, v1.0.0) — single Stage-2
+  extraction entry point `parse_label_ingredients()`. Handles `()`/`[]`/`{}`,
+  nesting, quoted delimiters, percentages, INS/E identifiers, OCR
+  whitespace/newline artefacts, and malformed input without raising.
+  Chemistry-free by construction (nodes start `unresolved`/`unverified`).
+- Parser regression tests (`backend/app/tests/unit/test_ingredient_parser.py`) —
+  brief §17 Cases A–J plus brackets/semicolons, raw-text preservation,
+  no-chemistry-invention, ordering, and empty-input cases. 16/16 passing.
+
+### Fixed
+- Parser strips a leading `Ingredients:` label header (per `DATA_PIPELINE.md`
+  Stage 2 example) instead of merging it into the first ingredient name.
+- Untracked committed `__pycache__/*.pyc` files; added root `.gitignore`.
+
 ### Planned Implementation
 - Phase 1: Database migrations, seed data, golden dataset verification
 - Phase 2: Backend skeleton — FastAPI health and DB connectivity

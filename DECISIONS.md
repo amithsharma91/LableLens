@@ -477,3 +477,48 @@ LabelLens exposes only task-specific API endpoints: `POST /normalize`, `POST /ma
 
 **Rejected alternatives:**
 - Generic `/chat` or `/ask` endpoint: convenient for rapid prototyping but bypasses the evidence model, creates hallucination risk, and makes the product's behavior non-auditable.
+
+---
+
+## ADR-016 — Single Canonical Ingredient Parser (Stage 2 Extraction)
+
+**Status:** Accepted  
+**Date:** 2026-10-05
+
+### Context
+
+The master brief warned of duplicated/conflicting ingredient processing
+(`parseRawLabelText()` naive comma splitting vs `parseIngredientTree()` vs
+`pipeline.ts` vs UI-local parsing). The 2026-10-05 implementation audit
+(`IMPLEMENTATION_AUDIT.md`) found none of that code exists in this checkout —
+`frontend/` is empty scaffolding and the backend is a health-endpoint skeleton.
+The duplication risk is therefore prospective, and the cheapest time to prevent
+it is before the first competing implementation appears.
+
+### Decision
+
+Exactly one canonical extraction entry point:
+`backend/app/services/ingredient_parser.py :: parse_label_ingredients(text)`.
+All future paths (OCR post-processing, manual-text entry, re-analysis after
+user correction, seed scripts) must call it. No UI or service code may
+implement its own top-level `split(",")`.
+
+The parser is deliberately chemistry-free: it extracts nesting, percentages,
+and INS/E identifiers plus syntactic normalization only. Nodes start as
+`match_status="unresolved"` / `verification_status="unverified"`. Entity
+resolution, chemistry, roles, and evidence arrive in later vertical slices.
+
+### Consequences
+
+- Parser regressions (brief §17 Cases A–J) must stay green; any extraction
+  behavior change requires a test update in the same commit.
+- The future normalization service (Stage 4) must not re-implement tokenizing;
+  it consumes parser nodes.
+- If an external prototype containing `ingredientParser.ts` /
+  `labelExtractionService.ts` is later merged, its parsing logic must be
+  reconciled against this canonical parser (second audit pass) rather than
+  added alongside it.
+
+**Rejected alternatives:**
+- Per-caller naive splitting: fast to write, silently breaks every nested
+  declaration (`A (B, C), D`) and recreates the exact conflict the brief warns about.
