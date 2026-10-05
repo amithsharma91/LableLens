@@ -562,3 +562,44 @@ chemical/identity/role/evidence fields exist on the output.
 **Rejected alternatives:**
 - Autocorrect-style normalization (edit-distance fixing of OCR typos):
   converts observations into guesses without evidence; explicitly forbidden.
+
+---
+
+## ADR-018 — Candidate-Only Entity Resolution (Stage 5)
+
+**Status:** Accepted  
+**Date:** 2026-10-05
+
+### Context
+
+Stage 5 sits between normalized text and verification. The failure mode to
+prevent is silent promotion: a plausible string match becoming a verified
+chemical record with formula/CAS/structure attached.
+
+### Decision
+
+`backend/app/services/entity_resolver.py :: resolve_entities()` is the only
+resolution entry point. It reads Stage-4 nodes and an explicit
+`EntityRegistry` (contract + `InMemoryRegistry`; empty registries valid) and
+emits `Resolution` records with statuses
+`exact_match | candidate | ambiguous | unresolved` — no `verified` status
+exists. `selected_candidate` is set only on a single exact hit; ambiguity
+and OCR-near results stay unselected with deterministic ordering
+(method rank, score, name, ref). Internal scores are ranking-only, never
+calibrated probabilities. Test registries use `TEST-###` refs and
+`synthetic_test_fixture` sources so fixtures can never be mistaken for
+verified chemistry. No network, RDKit, AI, or dynamic behavior: identical
+registry + input always yields identical output.
+
+### Consequences
+
+- Verification/evidence stages must consume `Resolution` records and enforce
+  the formal gate before any `verified` state; they may not reinterpret a
+  candidate ref as a chemical-entity ID.
+- New alias/identifier mappings require explicit registry entries, never
+  algorithmic invention.
+
+**Rejected alternatives:**
+- Fuzzy-first matching as authority: unbounded similarity promotes guesses;
+  OCR-near is therefore bounded (distance ≤ 2, length ≥ 5), flagged, and
+  never selected.

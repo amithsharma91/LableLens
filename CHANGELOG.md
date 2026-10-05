@@ -34,6 +34,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`backend/app/tests/unit/test_ingredient_normalizer.py`) — gate items
   1–16 plus alias-stays-text and no-chemistry safety tests. 35/35 passing
   across the full suite.
+- Candidate entity resolver (Stage 5,
+  `backend/app/services/entity_resolver.py`, v1.0.0) — single canonical
+  entry point `resolve_entities()` consuming Stage-4 normalized nodes.
+  Provider-independent `EntityRegistry` contract + explicit
+  `InMemoryRegistry`; priority exact-identifier → exact-name →
+  exact-alias → controlled OCR-near (bounded, flagged) → contextual
+  supporting signal → unresolved. Statuses
+  `exact_match | candidate | ambiguous | unresolved`; selection only on
+  exact hit, never first-of-many; qualitative confidence only; no
+  chemistry/verification/RDKit/AI/network. 63/63 passing.
 
 ### Fixed
 - Parser strips a leading `Ingredients:` label header (per `DATA_PIPELINE.md`
