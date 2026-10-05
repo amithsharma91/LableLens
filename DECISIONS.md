@@ -1,0 +1,479 @@
+# LabelLens — Architectural Decision Records
+
+> Last updated: 2026-10-04  
+> All decisions recorded here reflect the specification phase. Status: **Accepted** unless noted.
+
+---
+
+## ADR-001 — PostgreSQL via Supabase as Primary Database
+
+**Status:** Accepted  
+**Date:** 2026-10-04
+
+### Context
+
+LabelLens stores structured provenance-aware data: ingredients, claims, sources, confidence scores, and relationships between them. These are relational by nature — a claim links to one or more sources, a source has an authority class, an ingredient has multiple evidence records. We need row-level access control for multi-tenant use and the flexibility to store semi-structured metadata without sacrificing queryability of important fields.
+
+### Decision
+
+Use PostgreSQL hosted on Supabase as the primary database.
+
+### Rationale
+
+- Relational integrity enforces correct claim-source links that a document store cannot guarantee.
+- Supabase's free tier covers MVP scale with no upfront cost (aligns with ADR-011).
+- Row-Level Security (RLS) is built into PostgreSQL and exposed directly by Supabase, enabling per-user data isolation without application-layer enforcement.
+- JSONB columns provide flexibility for metadata fields that vary by ingredient type while keeping structured fields (CAS, formula, confidence scores) properly indexed and queryable.
+- Supabase exposes a PostgREST auto-API and Auth, reducing boilerplate infrastructure.
+
+### Consequences
+
+- Schema migrations must be managed carefully as the data model evolves.
+- All agents and services must connect through Supabase credentials; local SQLite shortcuts are not permitted.
+- JSONB fields must not be used as an escape hatch for data that should have its own column.
+
+**Rejected alternatives:**
+- Pure document store (MongoDB, Firestore): no relational integrity for claim-source links; querying across relationships becomes application-level logic.
+- SQLite: single-file design is not suitable for multi-service deployment or concurrent writes from separate backend workers.
+
+---
+
+## ADR-002 — FastAPI + Python as Backend
+
+**Status:** Accepted  
+**Date:** 2026-10-04
+
+### Context
+
+The backend must orchestrate chemistry validation (RDKit), OCR result normalization, source registry lookups, AI model calls, and evidence assembly. Language and framework choice directly constrains which libraries are available natively.
+
+### Decision
+
+Use FastAPI with Python as the backend framework.
+
+### Rationale
+
+- RDKit — the authoritative cheminformatics library — is Python-native. Using Python eliminates the need for a subprocess bridge or external microservice just for chemistry operations.
+- FastAPI's async support handles concurrent I/O (database queries, AI API calls, external source lookups) efficiently.
+- Pydantic models provide typed request/response validation at the boundary, catching malformed data before it enters the system.
+- FastAPI auto-generates OpenAPI documentation, which serves as the authoritative API contract consumed by the frontend and any future integrations.
+- Python's data science ecosystem (NumPy, Pandas, PIL) is available if needed for future image preprocessing or analysis stages.
+
+### Consequences
+
+- The backend is a Python service; all backend contributors must be comfortable with Python async patterns.
+- Dependency management (RDKit, Pydantic v2, SQLAlchemy) requires a pinned `requirements.txt` or `pyproject.toml` to ensure reproducibility.
+- OpenAPI output from FastAPI must be kept in sync with the frontend's typed API client.
+
+**Rejected alternatives:**
+- Node.js / TypeScript backend: no native RDKit support. A subprocess or HTTP bridge to a Python chemistry service would introduce latency, deployment complexity, and a second language surface.
+
+---
+
+## ADR-003 — Next.js + TypeScript + Tailwind as Frontend
+
+**Status:** Accepted  
+**Date:** 2026-10-04
+
+### Context
+
+LabelLens is primarily used on mobile devices (camera-first scan workflow). The frontend must enforce typed contracts against the backend API, deploy cheaply, and deliver a responsive mobile-first UI without a large custom CSS surface.
+
+### Decision
+
+Use Next.js (App Router) with strict TypeScript and Tailwind CSS, deployed to Vercel.
+
+### Rationale
+
+- Next.js App Router supports server components, streaming, and image optimization — all relevant for rendering product label data and structure images efficiently on mobile.
+- Strict TypeScript mode forces explicit typing of all API responses, making contract drift a compile-time error rather than a runtime surprise.
+- Typed API contracts generated from the FastAPI OpenAPI spec close the loop between backend and frontend types.
+- Tailwind's utility-first approach delivers consistent mobile-first responsive layouts without a custom design system.
+- Vercel's free tier covers MVP deployment (aligns with ADR-011) with zero-config Next.js support.
+
+### Consequences
+
+- All frontend code must pass TypeScript strict mode; `any` casts must be justified with a comment.
+- API client types must be regenerated whenever the backend OpenAPI spec changes.
+- Tailwind class usage must follow the project's established utility conventions to avoid duplication.
+
+**Rejected alternatives:**
+- Plain HTML/JS: no typed contracts between frontend and backend; poor mobile UX without a component model; no server-side rendering for initial load performance.
+
+---
+
+## ADR-004 — RDKit as the Chemistry Engine
+
+**Status:** Accepted  
+**Date:** 2026-10-04
+
+### Context
+
+LabelLens validates chemical identifiers (SMILES, InChI, CAS), calculates molecular descriptors, and renders 2D structure images. These operations must be deterministic and verifiable — the same input must always produce the same output, and results must be traceable to an open algorithm, not a black box.
+
+### Decision
+
+Use RDKit as the sole chemistry computation engine.
+
+### Rationale
+
+- RDKit is deterministic: the same SMILES input always produces the same canonical SMILES, descriptors, and structure image. This is essential for the evidence model where calculation provenance must be reproducible.
+- BSD license: no commercial restrictions; open source and auditable.
+- Python-native: integrates directly into the FastAPI backend without an external process.
+- Supports SMILES validation, canonicalization, InChI generation, descriptor calculation (MW, formula, LogP, rings), and 2D depiction.
+- Widely used in academic and pharmaceutical research; its behavior is well-documented and peer-reviewed.
+
+### Consequences
+
+- RDKit must be included in all backend environments (dev, CI, production). Docker images must pin the RDKit version.
+- Any chemistry calculation whose result is stored in the database must record which RDKit version produced it so stale values can be recomputed after upgrades.
+- Non-molecular entities (mixtures, polymers, trade names) must use the representation types defined in ADR-012 and must not be forced through RDKit validation.
+
+**Rejected alternatives:**
+- AI-generated chemistry (asking an LLM for a SMILES or formula): not deterministic, not verifiable, and explicitly prohibited by ADR-007. An LLM may hallucinate a plausible-looking but incorrect CAS or SMILES.
+
+---
+
+## ADR-005 — Pipeline Stage Separation: OCR → Extraction → Normalization → Matching → Verification
+
+**Status:** Accepted  
+**Date:** 2026-10-04
+
+### Context
+
+Label data passes through several lossy transformation steps before becoming a verified chemical identity. Conflating these steps makes it impossible to know which step introduced an error or how confident each step's output is.
+
+### Decision
+
+Separate the processing pipeline into distinct stages — OCR, extraction, normalization, matching, and verification — each with its own confidence score and stored output.
+
+### Rationale
+
+- Each stage can fail or degrade independently. An OCR stage with 0.6 confidence should not automatically promote to a verified identity.
+- Per-stage confidence scores (see ADR-010) allow the UI to surface exactly where uncertainty lies, rather than presenting a single opaque score.
+- Raw OCR text is never treated as verified chemistry. It must pass through normalization (synonym resolution, CAS formatting) and matching (source registry lookup, RDKit validation) before any verification flag is set.
+- Storing intermediate outputs enables debugging, reprocessing, and audit trails without re-running the full pipeline.
+- This is the primary anti-hallucination control: a claim cannot advance to a higher-confidence stage without evidence from that stage.
+
+### Consequences
+
+- The database schema must represent each stage's output as a separate record or column set with its own confidence and timestamp.
+- Pipeline stages are independently retryable; the system must handle partial pipeline states gracefully.
+- Any code that skips a stage (e.g., pre-loading known chemicals) must explicitly set confidence values and note the bypass reason.
+
+**Rejected alternatives:**
+- Single-pass extraction: convenient to implement but masks error sources. A user cannot tell whether a wrong structure came from OCR misread, normalization error, or wrong match.
+
+---
+
+## ADR-006 — Evidence-First Architecture with Claim-Level Provenance
+
+**Status:** Accepted  
+**Date:** 2026-10-04
+
+### Context
+
+A product ingredient may have its identity, structure, formula, and role sourced from different authorities. Storing a single description blob per ingredient makes it impossible to express that the CAS came from PubChem, the structure was validated by RDKit, and the role was extracted from the label — each with different confidence.
+
+### Decision
+
+Every important claim is a separate record linked to its source(s). The evidence model is the authoritative representation; display fields are derived from it.
+
+### Rationale
+
+- Claim-level provenance means each field (CAS, formula, SMILES, role, safety flag) carries its own source reference and confidence score.
+- Allows the UI to show "CAS confirmed by PubChem (high confidence)" alongside "role extracted from label OCR (medium confidence)" for the same ingredient.
+- Supports per-field update: if a new source provides a better structure, only the structure claim is updated; other claims are unaffected.
+- Enables audit queries: "show all claims sourced from registry X" or "show all claims with identity_confidence < 0.7".
+- Directly supports the multi-dimensional confidence model in ADR-010.
+
+### Consequences
+
+- Queries that need to display a complete ingredient view must join across multiple claim records; views or materialized summaries may be needed for performance.
+- All write paths must record a source reference; claims without a source are not permitted.
+- The frontend must handle partial evidence (some fields confirmed, others not) gracefully rather than waiting for full confirmation.
+
+**Rejected alternatives:**
+- Single `description` blob per ingredient: easy to write but impossible to verify at field level; no way to show per-field confidence or cite individual sources.
+
+---
+
+## ADR-007 — AI as Explanation Layer Only, Not as Authority for Scientific Data
+
+**Status:** Accepted  
+**Date:** 2026-10-04
+
+### Context
+
+AI language models can generate fluent, plausible-sounding chemical identifiers, formulas, and safety assessments that are factually wrong. If AI output is treated as authoritative data, hallucinated values will enter the evidence store and propagate to users as facts.
+
+### Decision
+
+AI models are permitted only to generate natural language explanations from verified structured input. AI outputs are candidates, not facts. AI is never permitted to invent or assert CAS numbers, molecular formulas, SMILES strings, or safety classifications.
+
+### Rationale
+
+- All scientific data (CAS, formula, SMILES, descriptors, safety flags) must originate from the source registry (ADR-009) or be calculated by RDKit (ADR-004) — both deterministic and auditable.
+- AI-generated explanations are labeled as such in the UI; users can see they are derived from verified inputs, not independently sourced.
+- AI outputs that enter the pipeline (e.g., extracted ingredient names from label text) are marked as `candidate` status and must pass normalization and matching before promotion.
+- This constraint makes it impossible for a prompt injection in a product label to introduce false chemistry data.
+
+### Consequences
+
+- The backend must validate that no AI response is written directly to a chemistry field without passing through normalization and matching stages.
+- Explanation endpoints receive pre-verified structured data as input; they must not make additional lookups or assertions about chemical identity.
+- Product copy and UI must clearly communicate that explanations are AI-generated summaries of verified data, not independent AI analysis.
+
+**Rejected alternatives:**
+- Using AI as a chemistry data source: not deterministic, not verifiable, and creates legal/safety risk if a user makes a health decision based on a hallucinated safety profile.
+
+---
+
+## ADR-008 — OmniRoute for Model Routing Behind an AIProvider Interface
+
+**Status:** Accepted  
+**Date:** 2026-10-04
+
+### Context
+
+LabelLens uses AI models for OCR result extraction, normalization candidates, and explanation generation. Different tasks may benefit from different models, and model availability or pricing may change. Coupling product logic to a specific provider SDK creates high switching cost.
+
+### Decision
+
+All AI model calls are routed through OmniRoute behind an `AIProvider` interface. No product logic may import a provider-specific SDK directly.
+
+### Rationale
+
+- The `AIProvider` interface abstracts provider-specific authentication, request formatting, and response parsing.
+- OmniRoute handles model selection, fallback, and load balancing without changes to calling code.
+- Swapping providers (e.g., moving a task from one model to another) requires only a configuration change, not a code change.
+- This isolation ensures that a provider outage or deprecation affects only the routing layer, not the product logic.
+- Consistent with the free-first constraint (ADR-011): cheaper or free models can be substituted without refactoring.
+
+### Consequences
+
+- All AI interactions must be defined as typed task interfaces (inputs/outputs) before implementation; provider-specific quirks are handled inside the adapter, not in product code.
+- The `AIProvider` interface must be versioned; breaking changes require migration of all adapters.
+- Testing product logic that involves AI calls must mock the `AIProvider` interface, not a specific provider SDK.
+
+**Rejected alternatives:**
+- Direct provider SDK calls in product logic: high coupling, makes multi-provider or fallback scenarios require widespread code changes.
+
+---
+
+## ADR-009 — Source Registry as the Only Gateway for Trusted Sources
+
+**Status:** Accepted  
+**Date:** 2026-10-04
+
+### Context
+
+LabelLens's credibility depends on the trustworthiness of its data sources. If arbitrary sources can become trusted without review, the evidence model loses its meaning. A claim marked "high confidence" must mean it came from a reviewed, authoritative source.
+
+### Decision
+
+No source may be marked as trusted without going through the source registry review process. The registry defines, for each source: its claim types, authority class, licensing stance, freshness class, and update cadence.
+
+### Rationale
+
+- The registry is the single place where source authority is evaluated and recorded. Product logic that queries the registry can always know whether a source is trusted, for which claim types, and under what license.
+- Preventing ad hoc source addition stops confidence inflation: a developer cannot shortcut the process by writing a quick scraper and marking its output as high confidence.
+- Licensing stance is recorded per source so the product can avoid surfacing data that cannot be shown to end users under the source's terms.
+- Freshness class informs the pipeline when a source's cached data should be considered stale and refreshed.
+
+### Consequences
+
+- Adding a new data source requires a registry entry with all required fields before any pipeline code can use it.
+- The source registry must be version-controlled and reviewed alongside schema changes.
+- Any source that changes its licensing terms must trigger a registry update and a review of existing claims sourced from it.
+
+**Rejected alternatives:**
+- Per-developer source addition without registry review: leads to inconsistent authority levels, unknown licensing exposure, and confidence scores that are not comparable across ingredients.
+
+---
+
+## ADR-010 — Multi-Dimensional Confidence Model
+
+**Status:** Accepted  
+**Date:** 2026-10-04
+
+### Context
+
+A single AI confidence score (e.g., 0.87) for an ingredient implies a precision that does not exist. OCR quality, extraction correctness, normalization match quality, identity confirmation, and structure validation are independent concerns that can each succeed or fail independently.
+
+### Decision
+
+Use a multi-dimensional confidence model with separate scores for each pipeline stage and claim type: `ocr_confidence`, `extraction_confidence`, `normalization_confidence`, `identity_confidence`, `structure_confidence`, `formula_confidence`, `role_confidence`, and `evidence_confidence`.
+
+### Rationale
+
+- A single score hides the source of uncertainty. An ingredient with good OCR but a failed structure lookup and a high-confidence label role extraction cannot be accurately represented by one number.
+- Per-dimension scores allow the UI to show exactly what is and is not known: "identity confirmed, structure not available, role extracted from label."
+- Downstream logic (e.g., flagging ingredients for manual review) can set thresholds per dimension rather than guessing from a composite.
+- Avoids false precision: it is more honest to show `identity_confidence: HIGH, structure_confidence: UNKNOWN` than a composite `0.71`.
+
+### Consequences
+
+- All pipeline stages must write their confidence output to the correct dimension field using qualitative states; using a generic `confidence` field is not permitted.
+- Numeric scores may be used internally for candidate ranking but must not be displayed to users as calibrated probabilities without validation. Display always uses qualitative states (HIGH, MEDIUM, LOW, UNKNOWN, CONFLICTED).
+- UI components must handle null/missing dimension scores without implying failure; absence of a score means that dimension has not been evaluated.
+- Aggregated display scores (if needed for sorting or filtering) must be computed as explicit formulas documented in the spec, not inferred from the raw dimensions.
+
+**Rejected alternatives:**
+- Single composite AI confidence score: convenient for display but misleading; conflates independent error sources and makes debugging pipeline failures harder.
+
+---
+
+## ADR-011 — Free-First Engineering Constraint
+
+**Status:** Accepted  
+**Date:** 2026-10-04
+
+### Context
+
+LabelLens is an MVP. Committing to paid infrastructure, APIs, or services before there is evidence of user demand creates cost before value. The team must be able to build, deploy, and iterate without a budget.
+
+### Decision
+
+Build and operate at zero or near-zero cost for MVP. Evaluate paid services only when a measured gap exists that a paid service would close. Prefer local verified datasets, free authoritative APIs, and local RDKit calculations over paid alternatives.
+
+### Rationale
+
+- Supabase free tier, Vercel free tier, and free public chemistry APIs (PubChem, ChEMBL) cover the MVP stack at no cost.
+- RDKit runs locally; no per-calculation API cost.
+- Free-first forces prioritization: only features with clear user value justify introducing a cost.
+- When a paid service is evaluated, the decision must be recorded as an ADR update with the measured gap that justified it.
+
+### Consequences
+
+- Rate limits on free-tier services must be accounted for in the pipeline design; heavy batch operations must be queued and throttled.
+- Any introduction of a paid dependency requires an explicit decision record and cost estimate before merging.
+- Performance optimization should prefer algorithmic improvements and caching over scaling up paid infrastructure.
+
+**Rejected alternatives:**
+- Starting with paid infrastructure: acceptable eventually, but premature before product-market fit; creates burn rate and irreversible commitments.
+
+---
+
+## ADR-012 — Representation Types for Non-Molecular Entities
+
+**Status:** Accepted  
+**Date:** 2026-10-04
+
+### Context
+
+Not every ingredient on a product label is a discrete small molecule with a valid SMILES string. Many ingredients are mixtures, polymers, trade names, or natural complexes for which a single SMILES is meaningless or does not exist. Forcing all ingredients through a SMILES-mandatory path would cause fabricated structures to enter the database.
+
+### Decision
+
+Every ingredient record has an explicit representation type: one of `single_molecule`, `salt`, `polymer`, `material`, `mixture`, `natural_complex`, `formulation`, `trade_name`, or `unknown`. SMILES and structure data are only populated for types where they are meaningful. The UI shows "not applicable" for structure fields when the representation type does not support them.
+
+### Rationale
+
+- Prevents structure fabrication: a `mixture` type ingredient cannot accidentally receive a SMILES value, because the pipeline checks representation type before writing structure fields.
+- Enables accurate UI rendering: the frontend knows not to show a structure image placeholder for a trade name, avoiding confusing empty state.
+- `unknown` type allows the pipeline to store an ingredient without asserting its nature before sufficient evidence is available.
+- Representation type is itself a claim with its own confidence, allowing it to be updated as evidence improves.
+
+### Consequences
+
+- All ingredient write paths must set representation type explicitly; `unknown` is the only permitted default when type cannot be determined.
+- Chemistry validation logic must gate on representation type before calling RDKit; calling RDKit on a `mixture` is an error.
+- Frontend components that display chemistry data must check representation type before rendering structure-related UI elements.
+
+**Rejected alternatives:**
+- Universal SMILES requirement: forces fabricated or placeholder structures for mixtures and trade names, undermining the anti-hallucination architecture.
+
+---
+
+## ADR-013 — UUID Primary Keys Throughout
+
+**Status:** Accepted  
+**Date:** 2026-10-04
+
+### Context
+
+LabelLens may involve multiple backend services, offline import workflows, and future distributed agents that generate records independently. Sequential integer primary keys create collision risk in these scenarios and expose internal record counts through public IDs.
+
+### Decision
+
+All tables use UUID primary keys generated at the application or database level.
+
+### Rationale
+
+- UUIDs are safe for distributed generation: two services can create records simultaneously without coordination and without collision.
+- No sequential ID leakage: users and external systems cannot infer record counts or creation order from exposed IDs.
+- Offline/import workflows can pre-assign UUIDs before writing to the database, enabling idempotent inserts.
+- PostgreSQL has native UUID support (`uuid` type, `gen_random_uuid()`); no extension required on modern versions.
+
+### Consequences
+
+- UUIDs are larger than integers (16 bytes vs 4-8 bytes); index size increases. This is acceptable at MVP scale.
+- URLs and logs will contain UUID strings; tooling that displays them must be comfortable with non-sequential IDs.
+- Foreign key joins on UUIDs are slightly more expensive than integer joins; query plans should be reviewed if performance issues arise.
+
+**Rejected alternatives:**
+- Sequential integer PKs: simple and compact but unsafe for distributed generation and leaks record counts through public-facing IDs.
+
+---
+
+## ADR-014 — Vertical Slice Development Order
+
+**Status:** Accepted  
+**Date:** 2026-10-04
+
+### Context
+
+LabelLens has multiple subsystems (OCR, chemistry, evidence, AI explanation, comparison) that depend on each other. Building horizontally (completing all infrastructure before any feature) delays working software and makes integration problems visible late. Building by feature slice ensures each increment is testable end-to-end.
+
+### Decision
+
+Develop in vertical slices in this order: Health + DB → Scan → OCR → Ingredient editing → Entity matching → Chemistry → Evidence → Analysis → Compare → Grounded explanation.
+
+### Rationale
+
+- Each slice delivers a working, testable increment. After the OCR slice, a label image can be scanned and ingredients listed, even if chemistry data is not yet enriched.
+- Dependencies flow forward: chemistry requires matching, matching requires OCR, OCR requires scan. Building in this order means each new slice has a tested foundation.
+- Integration bugs surface early: the database schema, API contracts, and frontend types are exercised from the first slice, not discovered during final integration.
+- The explanation slice is last because it consumes verified structured data from all prior slices; building it first would require mocking everything.
+
+### Consequences
+
+- Feature work that skips ahead in the slice order must explicitly mock or stub the missing dependencies; those stubs must be replaced before the dependent slice ships.
+- Each slice has defined acceptance criteria before development starts.
+- Refactoring that affects an earlier slice must be verified against all later slices that depend on it.
+
+**Rejected alternatives:**
+- Horizontal layered build (all DB, then all API, then all UI): delays working software; integration issues discovered late; harder to demo or gather feedback incrementally.
+
+---
+
+## ADR-015 — No Chat Endpoint / No Generic AI API
+
+**Status:** Accepted  
+**Date:** 2026-10-04
+
+### Context
+
+It would be technically simple to expose a `/chat` endpoint that passes user messages to an AI model and streams responses. However, this would make AI output the product rather than an implementation detail, undermining the evidence-first architecture and creating a path for unverified AI assertions to reach users.
+
+### Decision
+
+LabelLens exposes only task-specific API endpoints: `POST /normalize`, `POST /match`, `GET /chemistry`, `GET /evidence`, `GET /explanation`. There is no `/chat` endpoint and no generic AI passthrough API. AI is an implementation component; it has no externally visible surface of its own.
+
+### Rationale
+
+- Task-specific endpoints enforce that every AI call has a defined input schema, output schema, and validation step. A generic chat endpoint has none of these.
+- Prevents prompt injection via product labels from having any effect: the API does not accept freeform user text that gets passed directly to an AI model.
+- Makes the product's behavior auditable: every AI interaction is tied to a specific pipeline stage with logged inputs and outputs.
+- Consistent with ADR-007: AI is an explanation layer, not an authority. A chat endpoint would imply AI authority.
+- Keeps the API surface small and purposeful; each endpoint has a clear contract and testable behavior.
+
+### Consequences
+
+- Any new AI-assisted feature must be expressed as a new typed endpoint, not by extending a generic chat surface.
+- The frontend must not display AI outputs that do not correspond to a specific structured API response.
+- Documentation must clearly explain that LabelLens is not an AI chatbot about ingredients; it is a structured verification tool with AI-generated explanations.
+
+**Rejected alternatives:**
+- Generic `/chat` or `/ask` endpoint: convenient for rapid prototyping but bypasses the evidence model, creates hallucination risk, and makes the product's behavior non-auditable.

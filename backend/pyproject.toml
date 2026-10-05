@@ -1,0 +1,22 @@
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["app/tests"]
+pythonpath = ["."]
+
+[project]
+name = "labellens-backend"
+version = "0.1.0"
+description = "LabelLens FastAPI Backend"
+authors = [{name = "LabelLens Team"}]
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "pydantic-settings",
+    "sqlalchemy",
+    "asyncpg",
+    "pytest",
+    "pytest-asyncio",
+    "httpx"
+]

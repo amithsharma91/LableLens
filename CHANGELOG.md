@@ -1,0 +1,84 @@
+# Changelog
+
+All notable changes to LabelLens will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Planned Implementation
+- Phase 1: Database migrations, seed data, golden dataset verification
+- Phase 2: Backend skeleton — FastAPI health and DB connectivity
+- Phase 3: Scan and OCR integration
+- Phase 4: Ingredient editing and normalization
+- Phase 5: Entity matching and chemistry pipeline
+- Phase 6: Evidence and analysis pipeline
+- Phase 7: Comparison and grounded explanation
+- Phase 8: Frontend
+- Phase 9: Testing and regression benchmarks
+- Phase 10: Production deployment
+
+---
+
+## [0.1.1] — 2026-10-04 — Documentation Completion
+
+### Added
+- **ARCHITECTURE.md** — Complete system architecture, data flow, and deployment topology.
+- **TEST_STRATEGY.md** — Full test pyramid, QA processes, and regression dataset usage.
+- **SECURITY.md** — Threat model, prompt injection defenses, RLS, and security checklist.
+- **DECISIONS.md** — 15 key architectural decision records (ADRs).
+- **CHANGELOG.md** — This changelog to track future project evolution.
+- **CASE_STUDY.md** — Portfolio positioning, methodologies, and technical deep-dives.
+- **PRESENTATION.md** — Slide-by-slide final presentation outline and speaker notes.
+- **DEMO_SCRIPT.md** — Step-by-step live demonstration script with fallback plans.
+- **DEVELOPMENT_GUIDE.md** — Workflow rules, stack setup, and pre-commit checklists for agents.
+- **DATA_PIPELINE.md** — Deep technical reference for all 10 stages of the chemistry pipeline.
+
+---
+
+## [0.1.0] — 2026-10-04 — Specification Release
+
+Initial specification and documentation release. No implementation code shipped.
+All eight specification artifacts are frozen at v1.0.
+
+### Added
+
+- **PRODUCT_SPEC.md v1.0** — Product definition, MVP scope, user experience design,
+  ingredient intelligence model, AI boundaries, free-first constraint, success metrics,
+  and portfolio positioning. Frozen.
+
+- **CHEMISTRY_DATA_SPEC.md v1.0** — Scientific data model, entity types, validation
+  rules, SMILES rules, confidence model, forbidden behaviors, and AI grounding contract.
+
+- **EVIDENCE_AND_CONFIDENCE_SPEC.md v1.0** — Evidence architecture, claim-level
+  provenance, source hierarchy, confidence model, verification gates, conflict handling,
+  and audit trail design.
+
+- **DATABASE_SCHEMA.md v1.0** — Full PostgreSQL schema covering the MVP table set,
+  entity relationships, integrity constraints, index strategy, null strategy, versioning
+  approach, and security model.
+
+- **API_SPEC.md v1.0** — Full FastAPI API contract including endpoint definitions,
+  error codes, security checklist, adapter contracts, end-to-end critical path, and
+  acceptance criteria.
+
+- **SOURCE_REGISTRY.md v1.0** — Approved source registry documenting 14 authoritative
+  sources: PubChem, ChEBI, NIST WebBook, RDKit, FSSAI, Codex GSFA, EU Food Additives
+  Database, FDA, CosIng, CDSCO, Open Food Facts, Open Beauty Facts, PubMed, and Primary
+  Literature.
+
+- **LABEL_REGRESSION_DATASET.csv v1.0** — 30-row regression dataset scaffold
+  (LR-001 through LR-030) covering food, snacks, beverages, cosmetics, personal care,
+  household, and other product categories. All rows marked `needs_real_label` pending
+  Phase 1 verification.
+
+- **INGREDIENT_GOLDEN_DATA.csv v1.0** — 100-row golden chemistry candidate dataset
+  (GOLD-001 through GOLD-100) covering food, cosmetics, personal care, household,
+  supplement, and pharma categories. All rows marked `needs_verification` pending
+  Phase 1 verification.
+
+---
+
+[Unreleased]: https://github.com/your-org/labellens/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/your-org/labellens/releases/tag/v0.1.0
