@@ -1,0 +1,132 @@
+{
+  "label_id": "RL-14-01",
+  "domain": "beverage",
+  "product_name": "Frooti Mango Drink 1L",
+  "brand": "Frooti (Parle Agro)",
+  "raw_text": "Water, Mango Pulp (19%), Sugar, Acidity Regulator (INS 330), Permitted Class II Preservatives (INS 211, INS 224, INS 202), Antioxidant (INS 300), Contains Permitted Synthetic Food Colour (INS 110) and Added Flavor (Nature-Identical Flavoring Substances (Mango).",
+  "input_method": "manual",
+  "source_reference": {
+    "source_id": "QUALITYFOODSONLINE",
+    "source_class": "C",
+    "description": "Quality Foods Online (UK Indian grocer) product page for Frooti Mango Drink 1L (SKU DR-23); Ingredients section transcribed verbatim in printed order, including the page's own unbalanced parenthesis",
+    "url": "https://www.qualityfoodsonline.com/products/frooti-mango-drink-1-2l",
+    "retrieved_at": "2026-10-05",
+    "license_note": "retailer transcription of a Parle Agro label, not manufacturer-verified; FSSAI-style function-plus-code wording is consistent with a genuine Indian label"
+  },
+  "ground_truth_status": "secondary retailer transcription; weaker than an FDA label or manufacturer page and marked accordingly",
+  "review_status": "draft",
+  "scope_note": "Full printed ingredients paragraph (7 top-level nodes). INS codes nested inside multi-code groups stay in the parse tree only. The retailer's own missing closing parenthesis is preserved literally.",
+  "expected_ingredients": [
+    {
+      "sequence": 0,
+      "raw": "Water",
+      "normalized": "water",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    },
+    {
+      "sequence": 1,
+      "raw": "Mango Pulp (19%)",
+      "normalized": "mango pulp",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN",
+      "note": "percentage preserved (19.0); unregistered; stays unknown"
+    },
+    {
+      "sequence": 2,
+      "raw": "Sugar",
+      "normalized": "sugar",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    },
+    {
+      "sequence": 3,
+      "raw": "Acidity Regulator (INS 330)",
+      "normalized": "acidity regulator INS 330",
+      "match_status": "exact_match",
+      "identity_confidence": "HIGH",
+      "entity_ref": "CANON-2671a263ff76",
+      "verification_status": "unverified",
+      "verification_confidence": "UNKNOWN",
+      "note": "identifier resolves exactly, but the function-name agrees with no record, so frozen V3/V4 refuse dual agreement: exact identifier resolution without verification"
+    },
+    {
+      "sequence": 4,
+      "raw": "Permitted Class II Preservatives (INS 211, INS 224, INS 202)",
+      "normalized": "permitted class ii preservatives",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN",
+      "note": "multi-code group yields nested INS children in the parse tree only (sub-top-level persistence is deferred); the top level carries no identifier and stays unresolved"
+    },
+    {
+      "sequence": 5,
+      "raw": "Antioxidant (INS 300)",
+      "normalized": "antioxidant INS 300",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN",
+      "note": "INS 300 is not a registered identifier; stays unknown"
+    },
+    {
+      "sequence": 6,
+      "raw": "Contains Permitted Synthetic Food Colour (INS 110) and Added Flavor (Nature-Identical Flavoring Substances (Mango).",
+      "normalized": "contains permitted synthetic food colour (INS 110) and added flavor (nature-identical flavoring substances (mango)",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN",
+      "note": "retailer transcription carries an unbalanced parenthesis (one closing paren missing); preserved literally with an unbalanced_opener limitation, never repaired"
+    }
+  ],
+  "expected_counts": {
+    "ingredients": 7,
+    "exact_matches": 1,
+    "alias_matches": 0,
+    "candidate_matches": 0,
+    "unresolved": 6,
+    "verified": 0,
+    "provisional": 0,
+    "unverified": 1,
+    "conflicted": 0,
+    "unknown": 6
+  },
+  "expected_unknowns": [
+    "water",
+    "mango pulp",
+    "sugar",
+    "permitted class ii preservatives",
+    "antioxidant INS 300",
+    "contains permitted synthetic food colour (INS 110) and added flavor (nature-identical flavoring substances (mango)"
+  ],
+  "expected_ambiguities": [
+    {
+      "normalized": "acidity regulator INS 330",
+      "resolver_state": "exact_match_without_verification",
+      "kind": "identifier resolves to citric acid but the function-name agrees with no record, so frozen V3/V4 withhold verification (unverified, UNKNOWN)"
+    }
+  ],
+  "correction": null,
+  "independent_review": {
+    "reviewer": "stage-14 implementation review",
+    "reviewed_at": "2026-10-05",
+    "method": "transcription re-checked against the fetched retailer page; ordering, scope notes, and the unbalanced parenthesis verified programmatically",
+    "status": "confirmed_page_fidelity_secondary",
+    "note": "Raw text is byte-identical to the retailer Ingredients section. Secondary source: a retailer transcription, not the manufacturer or the physical pack. No manufacturer claim is introduced beyond what the page prints; no chemistry is inferred from the function-names or codes.",
+    "chemistry_inferred": false
+  }
+}

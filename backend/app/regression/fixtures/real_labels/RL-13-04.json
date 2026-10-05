@@ -200,5 +200,13 @@
       "kind": "non-molecular generic term"
     }
   ],
-  "correction": null
+  "correction": null,
+  "independent_review": {
+    "reviewer": "stage-14 implementation review",
+    "reviewed_at": "2026-10-05",
+    "method": "transcription re-checked against the fetched source record; ordering, scope notes, and correction separation verified programmatically",
+    "status": "confirmed_official_source",
+    "note": "Raw text is byte-identical to the SPL Inactive ingredients paragraph in printed order. Actives/inactives scope is correct: acetaminophen, dextromethorphan HBr, and doxylamine succinate are named as out of scope in scope_note.",
+    "chemistry_inferred": false
+  }
 }

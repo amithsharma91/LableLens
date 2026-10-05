@@ -109,5 +109,13 @@
       "kind": "non-molecular generic term; the resolver emits unresolved, never an invented entity"
     }
   ],
-  "correction": null
+  "correction": null,
+  "independent_review": {
+    "reviewer": "stage-14 implementation review",
+    "reviewed_at": "2026-10-05",
+    "method": "transcription re-checked against the fetched source record; ordering, scope notes, and correction separation verified programmatically",
+    "status": "confirmed_source_fidelity",
+    "note": "Raw text is byte-identical to the OFF record ingredients_text. No manufacturer claim is introduced: the fixture asserts only that this is the stored OCR text of that record, with its garbling, and draws no formulation conclusion from it.",
+    "chemistry_inferred": false
+  }
 }

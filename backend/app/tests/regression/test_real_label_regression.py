@@ -120,7 +120,8 @@ def _run(fixture: dict):
 
 
 @pytest.mark.parametrize(
-    "label_id", ["RL-13-01", "RL-13-02", "RL-13-03", "RL-13-04"])
+    "label_id",
+    ["RL-13-01", "RL-13-02", "RL-13-03", "RL-13-04", "RL-14-01"])
 def test_real_label_pipeline_matches_reviewed_expectations(label_id):
     fixture = _fixture(label_id)
     run, _, _ = _run(fixture)
@@ -348,27 +349,30 @@ def test_label_input_boundary():
 
 def test_stage13_metrics_are_exact():
     runs = []
-    for label_id in ("RL-13-01", "RL-13-02", "RL-13-03", "RL-13-04"):
+    for label_id in ("RL-13-01", "RL-13-02", "RL-13-03", "RL-13-04",
+                     "RL-14-01"):
         run, _, _ = _run(_fixture(label_id))
         runs.append(run)
     metrics = summarize(runs)
-    assert metrics["labels_processed"] == 4
-    assert metrics["ingredients_observed"] == 50
-    assert metrics["ingredients_normalized"] == 50
-    assert metrics["exact_matches"] == 4
+    assert metrics["labels_processed"] == 5
+    assert metrics["ingredients_observed"] == 57
+    assert metrics["ingredients_normalized"] == 57
+    assert metrics["exact_matches"] == 5
     assert metrics["alias_matches"] == 0
     assert metrics["candidate_matches"] == 2
     assert metrics["ambiguous"] == 0
-    assert metrics["unresolved"] == 44
+    assert metrics["unresolved"] == 50
     assert metrics["verified"] == 0
     assert metrics["provisional"] == 4
+    assert metrics["unverified"] == 1
     assert metrics["conflicted"] == 0
-    assert metrics["unknown"] == 46
+    assert metrics["unknown"] == 52
     assert metrics["entity_match_false_positives"] == 0
-    assert metrics["unknown_count"] == 46
+    assert metrics["unknown_count"] == 52
     assert metrics["mismatches"] == 0
-    # 4 of 6 resolved ingredients reached a terminal decision.
-    assert metrics["verification_coverage"] == round(4 / 6, 4)
+    # 4 of 7 resolved ingredients reached a terminal decision; the
+    # identifier-resolved Frooti ingredient is honestly unverified.
+    assert metrics["verification_coverage"] == round(4 / 7, 4)
 
 
 # -- idempotency -----------------------------------------------------------------
@@ -411,8 +415,61 @@ def test_regression_datasets_still_hold_no_verified_truth():
 
 
 def test_fixtures_are_marked_draft_not_verified():
-    for label_id in ("RL-13-01", "RL-13-02", "RL-13-03", "RL-13-04"):
+    for label_id in ("RL-13-01", "RL-13-02", "RL-13-03", "RL-13-04",
+                     "RL-14-01"):
         fixture = _fixture(label_id)
         assert fixture["review_status"] == "draft"
         assert fixture["source_reference"]["retrieved_at"]
         assert fixture["source_reference"]["url"]
+        review = fixture["independent_review"]
+        assert review["reviewed_at"] == "2026-10-05"
+        assert review["chemistry_inferred"] is False
+
+
+def test_identifier_resolves_without_verification():
+    # The Frooti function-name carries a registered identifier, so
+    # resolution is exact -- but the name agrees with no record, and
+    # the frozen V3/V4 dual-agreement rules honestly refuse to
+    # verify. Identifier resolution must never imply verification.
+    run, service, _ = _run(_fixture("RL-14-01"))
+    acidity = next(
+        result for result in run["ingredient_results"]
+        if result["normalized_text"] == "acidity regulator INS 330")
+    assert acidity["match_status"] == "exact_match"
+    assert acidity["entity_ref"] == CITRIC_REF
+    assert acidity["verification_status"] == "unverified"
+    detail = asyncio.run(service.get_verification(
+        acidity["observation_id"], role="service"))
+    assert detail["decision"]["status"] == "unverified"
+    rules = {
+        item["rule_id"]: item["result"]
+        for item in detail["decision"]["gate_results"]
+    }
+    assert rules["V1_admissible_candidate"] == "PASS"
+    assert rules["V2_authoritative_source"] == "PASS"
+    assert rules["V3_identity_agreement"] == "FAIL"
+    assert rules["V4_identifier_validation"] == "FAIL"
+
+
+def test_nested_ins_codes_stay_in_the_parse_tree():
+    run, service, _ = _run(_fixture("RL-14-01"))
+    preservatives = next(
+        result for result in run["ingredient_results"]
+        if result["normalized_text"]
+        == "permitted class ii preservatives")
+    assert preservatives["match_status"] == "unresolved"
+    assert preservatives["entity_ref"] is None
+    detail = asyncio.run(service.get(
+        preservatives["observation_id"], role="service"))
+    tree_names = [
+        node["name"] for node in detail["tree"][0]["children"]
+    ] if detail["tree"][0].get("children") else []
+    assert tree_names == ["INS 211", "INS 224", "INS 202"]
+
+
+def test_retailer_typo_is_preserved_literally():
+    run, _, _ = _run(_fixture("RL-14-01"))
+    last = run["ingredient_results"][-1]
+    assert last["raw_text"].endswith("(Mango).")
+    assert last["match_status"] == "unresolved"
+    assert last["verification_status"] == "unknown"

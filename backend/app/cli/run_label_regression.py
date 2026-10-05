@@ -26,7 +26,7 @@ def _fixtures() -> list:
         Path(__file__).resolve().parent.parent
         / "regression" / "fixtures" / "real_labels"
     )
-    return sorted(root.glob("RL-13-*.json"))
+    return sorted(root.glob("RL-*-*.json"))
 
 
 def _build_offline():

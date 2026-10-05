@@ -152,5 +152,13 @@
     "reason": "transcriber first typed the structured SPL element name (SACCHARIN SODIUM); the printed Inactive ingredients paragraph reads Sodium Saccharin",
     "documented_by": "fixture author",
     "evidence": "same SPL: structured product-data element SACCHARIN SODIUM vs Inactive ingredients paragraph Sodium Saccharin"
+  },
+  "independent_review": {
+    "reviewer": "stage-14 implementation review",
+    "reviewed_at": "2026-10-05",
+    "method": "transcription re-checked against the fetched source record; ordering, scope notes, and correction separation verified programmatically",
+    "status": "confirmed_official_source",
+    "note": "Raw text is byte-identical to the SPL Inactive ingredients paragraph. Actives/inactives scope is correct: the 4 SPL actives (eucalyptol, menthol, methyl salicylate, thymol) are named as out of scope in scope_note. The correction cites both SPL readings (structured SACCHARIN SODIUM vs printed Sodium Saccharin).",
+    "chemistry_inferred": false
   }
 }

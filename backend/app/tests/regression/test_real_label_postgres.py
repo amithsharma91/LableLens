@@ -54,7 +54,8 @@ SNAPSHOT = (
     Path(__file__).resolve().parent.parent.parent.parent.parent
     / "snapshots" / "canonical_v1.json"
 )
-LABEL_IDS = ("RL-13-01", "RL-13-02", "RL-13-03", "RL-13-04")
+LABEL_IDS = ("RL-13-01", "RL-13-02", "RL-13-03", "RL-13-04",
+             "RL-14-01")
 
 MIGRATED_TABLES = (
     "review_events",
@@ -223,10 +224,12 @@ def test_live_regression_matches_reviewed_expectations(live):
     for run in runs:
         assert run["mismatches"] == [], run["label_id"]
     metrics = summarize(runs)
-    assert metrics["ingredients_observed"] == 50
-    assert metrics["exact_matches"] == 4
+    assert metrics["ingredients_observed"] == 57
+    assert metrics["exact_matches"] == 5
     assert metrics["provisional"] == 4
-    assert metrics["unknown"] == 46
+    assert metrics["unverified"] == 1
+    assert metrics["verified"] == 0
+    assert metrics["unknown"] == 52
     assert metrics["entity_match_false_positives"] == 0
     assert metrics["mismatches"] == 0
 
@@ -317,6 +320,24 @@ def test_live_correction_keeps_raw_and_uses_display(live):
     assert len(norms) == 2
     assert {row["normalized_text"] for row in norms} == {
         "saccharin sodium", "sodium saccharin"}
+
+
+@needs_db
+def test_live_identifier_resolution_without_verification(live):
+    run = _await(live(_fixture("RL-14-01")))
+    assert run["mismatches"] == []
+    acidity = next(
+        result for result in run["ingredient_results"]
+        if result["normalized_text"] == "acidity regulator INS 330")
+    assert acidity["match_status"] == "exact_match"
+    assert acidity["entity_ref"] == "CANON-2671a263ff76"
+    assert acidity["verification_status"] == "unverified"
+    rows = _fetch_all(
+        "SELECT status, rules_version FROM verification_decisions "
+        "WHERE id = '%s'" % acidity["decision_id"])
+    assert len(rows) == 1
+    assert rows[0]["status"] == "unverified"
+    assert rows[0]["rules_version"] == "1.0.0"
 
 
 @needs_db

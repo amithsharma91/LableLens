@@ -273,5 +273,13 @@
       "kind": "non-molecular generic term"
     }
   ],
-  "correction": null
+  "correction": null,
+  "independent_review": {
+    "reviewer": "stage-14 implementation review",
+    "reviewed_at": "2026-10-05",
+    "method": "transcription re-checked against the fetched source record; ordering, scope notes, and correction separation verified programmatically",
+    "status": "confirmed_page_fidelity_secondary",
+    "note": "Raw text preserves the INCIDecoder page order and spelling exactly, but the page itself is a user-contributed transcription, so this fixture cannot rise above secondary. No manufacturer claim is introduced; function/role commentary on the page was not transcribed.",
+    "chemistry_inferred": false
+  }
 }

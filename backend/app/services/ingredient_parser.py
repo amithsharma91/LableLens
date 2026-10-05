@@ -63,8 +63,13 @@ _TRAILING_PERCENT_RE = re.compile(
 # e.g. "INS471", "INS 471", "INS-471", "E330", "E 330" (full match).
 _IDENTIFIER_RE = re.compile(r"^(?:INS|E)\s*-?\s*\d+[a-zA-Z]?$", re.I)
 # Trailing bare identifier without parens, e.g. "Stabilizer INS471".
+# The tag must start at a token boundary (no preceding letter), so a
+# word ending in "e" + a digit run ("propane-1", "Rinse 471") is never
+# misread as an E-code. Codes after a space, hyphen, or digit still
+# match ("Acid E 330", "X-E211").
 _TRAILING_ID_RE = re.compile(
-    r"^(?P<head>.*?)(?P<tag>(?:INS|E)\s*-?\s*\d+[a-zA-Z]?)\s*$", re.I
+    r"^(?P<head>.*?)(?<![A-Za-z])"
+    r"(?P<tag>(?:INS|E)\s*-?\s*\d+[a-zA-Z]?)\s*$", re.I
 )
 
 
@@ -221,6 +226,20 @@ def _split_top_level(text: str, limitations: List[str]) -> List[str]:
             i += 1
             continue
         if ch in (",", ";") and not stack:
+            if (
+                ch == ","
+                and buf
+                and buf[-1].isdigit()
+                and i + 1 < n
+                and text[i + 1].isdigit()
+            ):
+                # Digit-comma-digit with no whitespace is a numeric
+                # run (locants like "1,2,3", decimals like "1,5"),
+                # not an ingredient separator. Semicolons always
+                # separate; spaced commas always separate.
+                buf.append(ch)
+                i += 1
+                continue
             segments.append("".join(buf))
             buf = []
             i += 1
