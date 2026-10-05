@@ -1,0 +1,156 @@
+{
+  "label_id": "RL-13-02",
+  "domain": "personal_care",
+  "product_name": "Listerine Cool Mint Antiseptic Mouthwash",
+  "brand": "Listerine (Kenvue Brands LLC)",
+  "raw_text": "Water, Alcohol (21.6%), Sorbitol, Poloxamer 407, Benzoic Acid, Sodium Saccharin, Sodium Benzoate, Flavor, Green 3",
+  "input_method": "manual",
+  "source_reference": {
+    "source_id": "DAILYMED",
+    "source_class": "A",
+    "description": "FDA DailyMed SPL setId edb9e374-4dba-5823-e053-2a95a90a3da5, version 7, effective 2025-03-03; Inactive ingredients paragraph (LOINC 51727-6), transcribed verbatim",
+    "url": "https://dailymed.nlm.nih.gov/dailymed/services/v2/spls/edb9e374-4dba-5823-e053-2a95a90a3da5.xml",
+    "retrieved_at": "2026-10-05"
+  },
+  "ground_truth_status": "official FDA drug label; scope is the inactive-ingredients paragraph (actives listed in the same SPL are out of scope for this slice)",
+  "review_status": "draft",
+  "scope_note": "Inactive-ingredients paragraph only. Active ingredients (eucalyptol, menthol, methyl salicylate, thymol) are documented in the SPL and excluded here by scope, not by oversight.",
+  "expected_ingredients": [
+    {
+      "sequence": 0,
+      "raw": "Water",
+      "normalized": "water",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    },
+    {
+      "sequence": 1,
+      "raw": "Alcohol (21.6%)",
+      "normalized": "alcohol",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN",
+      "note": "generic alcohol statement with percentage; never mapped to ethanol"
+    },
+    {
+      "sequence": 2,
+      "raw": "Sorbitol",
+      "normalized": "sorbitol",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    },
+    {
+      "sequence": 3,
+      "raw": "Poloxamer 407",
+      "normalized": "poloxamer 407",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    },
+    {
+      "sequence": 4,
+      "raw": "Benzoic Acid",
+      "normalized": "benzoic acid",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN",
+      "note": "distinct substance from sodium benzoate; shares no identity with it"
+    },
+    {
+      "sequence": 5,
+      "raw": "Sodium Saccharin",
+      "normalized": "sodium saccharin",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    },
+    {
+      "sequence": 6,
+      "raw": "Sodium Benzoate",
+      "normalized": "sodium benzoate",
+      "match_status": "exact_match",
+      "identity_confidence": "HIGH",
+      "entity_ref": "CANON-6223de871d0c",
+      "verification_status": "provisional",
+      "verification_confidence": "LOW"
+    },
+    {
+      "sequence": 7,
+      "raw": "Flavor",
+      "normalized": "flavor",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN",
+      "note": "generic non-molecular term; unresolved, never expanded"
+    },
+    {
+      "sequence": 8,
+      "raw": "Green 3",
+      "normalized": "green 3",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN",
+      "note": "color additive; not registered; stays unknown"
+    }
+  ],
+  "expected_counts": {
+    "ingredients": 9,
+    "exact_matches": 1,
+    "alias_matches": 0,
+    "candidate_matches": 0,
+    "unresolved": 8,
+    "verified": 0,
+    "provisional": 1,
+    "unverified": 0,
+    "conflicted": 0,
+    "unknown": 8
+  },
+  "expected_unknowns": [
+    "water",
+    "alcohol",
+    "sorbitol",
+    "poloxamer 407",
+    "benzoic acid",
+    "sodium saccharin",
+    "flavor",
+    "green 3"
+  ],
+  "expected_ambiguities": [
+    {
+      "normalized": "alcohol",
+      "resolver_state": "unresolved",
+      "kind": "generic term with a percentage; mapping it to ethanol would be an inference, so it stays unresolved"
+    },
+    {
+      "normalized": "flavor",
+      "resolver_state": "unresolved",
+      "kind": "non-molecular generic term"
+    }
+  ],
+  "correction": {
+    "applies_to_sequence": 5,
+    "raw_observed": "Saccharin Sodium",
+    "corrected_display": "Sodium Saccharin",
+    "reason": "transcriber first typed the structured SPL element name (SACCHARIN SODIUM); the printed Inactive ingredients paragraph reads Sodium Saccharin",
+    "documented_by": "fixture author",
+    "evidence": "same SPL: structured product-data element SACCHARIN SODIUM vs Inactive ingredients paragraph Sodium Saccharin"
+  }
+}

@@ -1,0 +1,277 @@
+{
+  "label_id": "RL-13-03",
+  "domain": "cosmetic",
+  "product_name": "Nivea Creme",
+  "brand": "Nivea (Beiersdorf)",
+  "raw_text": "Aqua, Paraffinum Liquidum, Cera Microcristallina, Glycerin, Lanolin Alcohol(Eucerit®), Paraffin, Panthenol, Magnesium Sulfate, Decyl Oleate, Octyldodecanol, Aluminum Stearates, Citric Acid, Magnesium Stearate, Limonene, Geraniol, Hydroxycitronellal, Linalool, Citronellol, Benzyl Benzoate, Cinnamyl Alcohol, Parfum",
+  "input_method": "manual",
+  "source_reference": {
+    "source_id": "INCIDECODER",
+    "source_class": "C",
+    "description": "INCIDecoder product page for Nivea Creme, user-uploaded 2018-02-24; INCI list transcribed in printed order",
+    "url": "https://incidecoder.com/products/nivea-nivea-creme",
+    "retrieved_at": "2026-10-05",
+    "license_note": "user-contributed transcription, not manufacturer-verified; ingredient order and spelling kept as published"
+  },
+  "ground_truth_status": "secondary transcription of a real product INCI list; weaker than an FDA label and marked accordingly",
+  "review_status": "draft",
+  "scope_note": "21 top-level ingredients observed; Lanolin Alcohol(Eucerit) additionally yields a nested Eucerit sub-ingredient in the parse tree (not separately persisted).",
+  "expected_ingredients": [
+    {
+      "sequence": 0,
+      "raw": "Aqua",
+      "normalized": "aqua",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    },
+    {
+      "sequence": 1,
+      "raw": "Paraffinum Liquidum",
+      "normalized": "paraffinum liquidum",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    },
+    {
+      "sequence": 2,
+      "raw": "Cera Microcristallina",
+      "normalized": "cera microcristallina",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    },
+    {
+      "sequence": 3,
+      "raw": "Glycerin",
+      "normalized": "glycerin",
+      "match_status": "candidate",
+      "identity_confidence": "LOW",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN",
+      "note": "common synonym of glycerol but absent from the approved names; stays a candidate, never selected"
+    },
+    {
+      "sequence": 4,
+      "raw": "Lanolin Alcohol(Eucerit®)",
+      "normalized": "lanolin alcohol",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN",
+      "note": "top-level node; the nested Eucerit sub-ingredient is preserved in the parse tree only (per-node persistence below top level is deferred)"
+    },
+    {
+      "sequence": 5,
+      "raw": "Paraffin",
+      "normalized": "paraffin",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    },
+    {
+      "sequence": 6,
+      "raw": "Panthenol",
+      "normalized": "panthenol",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    },
+    {
+      "sequence": 7,
+      "raw": "Magnesium Sulfate",
+      "normalized": "magnesium sulfate",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    },
+    {
+      "sequence": 8,
+      "raw": "Decyl Oleate",
+      "normalized": "decyl oleate",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    },
+    {
+      "sequence": 9,
+      "raw": "Octyldodecanol",
+      "normalized": "octyldodecanol",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    },
+    {
+      "sequence": 10,
+      "raw": "Aluminum Stearates",
+      "normalized": "aluminum stearates",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    },
+    {
+      "sequence": 11,
+      "raw": "Citric Acid",
+      "normalized": "citric acid",
+      "match_status": "exact_match",
+      "identity_confidence": "HIGH",
+      "entity_ref": "CANON-2671a263ff76",
+      "verification_status": "provisional",
+      "verification_confidence": "LOW"
+    },
+    {
+      "sequence": 12,
+      "raw": "Magnesium Stearate",
+      "normalized": "magnesium stearate",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    },
+    {
+      "sequence": 13,
+      "raw": "Limonene",
+      "normalized": "limonene",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    },
+    {
+      "sequence": 14,
+      "raw": "Geraniol",
+      "normalized": "geraniol",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    },
+    {
+      "sequence": 15,
+      "raw": "Hydroxycitronellal",
+      "normalized": "hydroxycitronellal",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    },
+    {
+      "sequence": 16,
+      "raw": "Linalool",
+      "normalized": "linalool",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    },
+    {
+      "sequence": 17,
+      "raw": "Citronellol",
+      "normalized": "citronellol",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    },
+    {
+      "sequence": 18,
+      "raw": "Benzyl Benzoate",
+      "normalized": "benzyl benzoate",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN",
+      "note": "near-miss guard: shares a word with sodium benzoate but is a different substance and must not resolve"
+    },
+    {
+      "sequence": 19,
+      "raw": "Cinnamyl Alcohol",
+      "normalized": "cinnamyl alcohol",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    },
+    {
+      "sequence": 20,
+      "raw": "Parfum",
+      "normalized": "parfum",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN",
+      "note": "generic non-molecular term covering 30-50 undisclosed chemicals; unresolved, never expanded"
+    }
+  ],
+  "expected_counts": {
+    "ingredients": 21,
+    "exact_matches": 1,
+    "alias_matches": 0,
+    "candidate_matches": 1,
+    "unresolved": 19,
+    "verified": 0,
+    "provisional": 1,
+    "unverified": 0,
+    "conflicted": 0,
+    "unknown": 20
+  },
+  "expected_unknowns": [
+    "aqua",
+    "paraffinum liquidum",
+    "cera microcristallina",
+    "glycerin",
+    "lanolin alcohol",
+    "paraffin",
+    "panthenol",
+    "magnesium sulfate",
+    "decyl oleate",
+    "octyldodecanol",
+    "aluminum stearates",
+    "magnesium stearate",
+    "limonene",
+    "geraniol",
+    "hydroxycitronellal",
+    "linalool",
+    "citronellol",
+    "benzyl benzoate",
+    "cinnamyl alcohol",
+    "parfum"
+  ],
+  "expected_ambiguities": [
+    {
+      "normalized": "parfum",
+      "resolver_state": "unresolved",
+      "kind": "non-molecular generic term"
+    }
+  ],
+  "correction": null
+}

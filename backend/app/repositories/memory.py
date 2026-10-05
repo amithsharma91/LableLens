@@ -110,10 +110,49 @@ class MemoryMatchRepository:
         role: str = AUTHENTICATED_ROLE,
     ) -> dict:
         _require_read(role)
+        latest = None
         for row in self._store.table("ingredient_normalizations").values():
             if row.get("observation_id") == observation_id:
-                return copy.deepcopy(row)
-        raise KeyError(observation_id)
+                latest = row
+        if latest is None:
+            raise KeyError(observation_id)
+        return copy.deepcopy(latest)
+
+    async def get_observation(
+        self,
+        observation_id: str,
+        *,
+        role: str = AUTHENTICATED_ROLE,
+    ) -> dict:
+        _require_read(role)
+        try:
+            row = self._store.table("ingredient_observations")[
+                str(observation_id)]
+        except KeyError:
+            raise KeyError(observation_id)
+        return copy.deepcopy(row)
+
+    async def record_correction(
+        self,
+        observation_id: str,
+        *,
+        display_text: str,
+        original_text: str,
+        reason: str,
+        role: str = SERVICE_ROLE,
+    ) -> dict:
+        _require_write(role)
+        rows = self._store.table("ingredient_observations")
+        try:
+            row = rows[str(observation_id)]
+        except KeyError:
+            raise KeyError(observation_id)
+        row["display_text"] = display_text
+        row["user_corrected"] = True
+        row["original_text"] = original_text
+        row["correction_reason"] = reason
+        row["source_type"] = "user_corrected"
+        return copy.deepcopy(row)
 
     async def get_chain(
         self,

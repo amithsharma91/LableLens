@@ -51,7 +51,36 @@ class MatchRepository(Protocol):
         *,
         role: str = AUTHENTICATED_ROLE,
     ) -> dict:
-        """Return the normalization row for one observation."""
+        """Return the latest normalization row for one observation.
+
+        A corrected observation owns several normalization rows
+        (history is preserved); the latest one is the text analysis
+        runs on.
+        """
+
+    async def get_observation(
+        self,
+        observation_id: str,
+        *,
+        role: str = AUTHENTICATED_ROLE,
+    ) -> dict:
+        """Return one ingredient_observations row."""
+
+    async def record_correction(
+        self,
+        observation_id: str,
+        *,
+        display_text: str,
+        original_text: str,
+        reason: str,
+        role: str = SERVICE_ROLE,
+    ) -> dict:
+        """Store a human correction without touching raw_text.
+
+        Sets display_text, user_corrected, original_text (the raw
+        text at correction time), correction_reason, and the
+        user_corrected source type. Returns the updated row.
+        """
 
 
 @runtime_checkable

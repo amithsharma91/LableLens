@@ -47,6 +47,26 @@ def _new_uuid() -> str:
     return str(uuid.uuid4())
 
 
+def _normalization_id(
+    observation_id: str, normalized_text: str, status: str
+) -> str:
+    """Stable normalization id for one observation's text.
+
+    Deterministic (uuid5 over the observation id plus the normalized
+    content, method, and version) so re-running the same input
+    reuses the row instead of duplicating it. A corrected text
+    normalizes differently, so it naturally yields a different id
+    and the pre-correction row stays intact as history.
+    """
+    return str(uuid.uuid5(
+        uuid.NAMESPACE_URL,
+        "|".join([
+            "normalization", observation_id, normalized_text,
+            NORMALIZER_METHOD, NORMALIZER_VERSION, status,
+        ]),
+    ))
+
+
 class ObservationService:
     """Pipeline orchestration over injected registry/adapters/repos."""
 
@@ -72,6 +92,8 @@ class ObservationService:
         *,
         scan_id: Optional[str] = None,
         observation_id: Optional[str] = None,
+        observation_ids: Optional[list] = None,
+        source_type: str = "ocr",
         role: str = "service",
     ) -> dict:
         """Parse raw text and persist one observation per top-level node.
@@ -80,10 +102,21 @@ class ObservationService:
         or enriched at this step. Nested children stay in the returned
         tree (re-derivable deterministically); per-node persistence
         below the top level is a documented later extension.
+
+        `observation_ids` optionally assigns stable ids to each node
+        in order (used by deterministic re-runs); `observation_id`
+        keeps its single-node meaning. Normalization ids derive from
+        the observation id plus normalized content, so repeating the
+        same input reuses rows instead of duplicating them.
         """
         parsed = parse_label_ingredients(raw_text)
         if not parsed.nodes:
             raise _errors.ServiceError("no ingredients extracted")
+        if observation_ids is not None and len(observation_ids) != len(
+            parsed.nodes
+        ):
+            raise _errors.ServiceError(
+                "observation id count does not match node count")
         scan = scan_id or _new_uuid()
         items = []
         for position, node in enumerate(parsed.nodes):
@@ -93,24 +126,29 @@ class ObservationService:
                 and len(parsed.nodes) == 1
             ):
                 node_id = observation_id
+            if observation_ids is not None:
+                node_id = observation_ids[position]
             await self._repos.matches.save_observation(
                 observation_row(
                     observation_id=node_id,
                     scan_id=scan,
                     sequence_number=position,
                     raw_text=node.raw_text,
+                    source_type=source_type,
                 ),
                 role=role,
             )
             normalized = normalize_label_text(node.raw_text)
             top = normalized.nodes[0] if normalized.nodes else None
+            normalized_text = (
+                top.normalized_text if top else node.raw_text
+            )
             await self._repos.matches.save_normalization(
                 normalization_row(
-                    normalization_id=top.id if top else _new_uuid(),
+                    normalization_id=_normalization_id(
+                        node_id, normalized_text, normalized.status),
                     observation_id=node_id,
-                    normalized_text=(
-                        top.normalized_text if top else node.raw_text
-                    ),
+                    normalized_text=normalized_text,
                     method=NORMALIZER_METHOD,
                     version=NORMALIZER_VERSION,
                     status=normalized.status,
@@ -133,14 +171,87 @@ class ObservationService:
             item["tree"] = tree
         return {"items": items, "scan_id": scan}
 
+    # -- correct ---------------------------------------------------------
+
+    async def correct(
+        self,
+        observation_id: str,
+        *,
+        corrected_text: str,
+        reason: str,
+        role: str = "service",
+    ) -> dict:
+        """Record a human correction without rewriting history.
+
+        The original `raw_text` stays immutable: the first correction
+        moves it to `original_text` and stores the corrected reading
+        in `display_text`. A fresh normalization row is persisted for
+        the corrected text, so the pre-correction normalization
+        remains as history and later reads/analyses use the latest
+        one. Correcting an already-corrected observation is refused:
+        there is no correction chain, only one documented revision.
+        A correction never establishes identity, chemistry, role, or
+        verification -- it only repairs text.
+        """
+        if not (corrected_text or "").strip():
+            raise _errors.ServiceError("corrected text is empty")
+        if not (reason or "").strip():
+            raise _errors.ServiceError("correction reason is required")
+        try:
+            stored = await self._repos.matches.get_observation(
+                observation_id, role=role)
+        except KeyError:
+            raise _errors.NotFoundError("observation not found")
+        if stored.get("user_corrected"):
+            raise _errors.ServiceError("observation already corrected")
+        updated = await self._repos.matches.record_correction(
+            observation_id,
+            display_text=corrected_text.strip(),
+            original_text=stored.get("raw_text") or "",
+            reason=reason.strip(),
+            role=role,
+        )
+        normalized = normalize_label_text(corrected_text.strip())
+        top = normalized.nodes[0] if normalized.nodes else None
+        normalized_text = (
+            top.normalized_text if top else corrected_text.strip()
+        )
+        normalization_id = await self._repos.matches.save_normalization(
+            normalization_row(
+                normalization_id=_normalization_id(
+                    observation_id, normalized_text,
+                    "corrected:%s" % normalized.status),
+                observation_id=observation_id,
+                normalized_text=normalized_text,
+                method=NORMALIZER_METHOD,
+                version=NORMALIZER_VERSION,
+                status=normalized.status,
+            ),
+            role=role,
+        )
+        return {
+            "observation": updated,
+            "normalization_id": normalization_id,
+            "normalized_text": normalized_text,
+        }
+
     # -- analyze -----------------------------------------------------------
 
     async def analyze(
         self, observation_id: str, *, role: str = "service"
     ) -> dict:
-        """Resolve + verify one observation; persist everything."""
+        """Resolve + verify one observation; persist everything.
+
+        Analysis runs on the corrected display text when a human
+        correction exists, otherwise on the raw text. The raw text
+        itself is never altered by this step.
+        """
         chain = await self._chain(observation_id, role=role)
-        reparsed = parse_label_ingredients(chain["observation"]["raw_text"])
+        effective = (
+            chain["observation"].get("display_text")
+            or chain["observation"]["raw_text"]
+        )
+        reparsed = parse_label_ingredients(effective)
         if len(reparsed.nodes) != 1:
             raise _errors.ServiceError("segment reparse mismatch")
         normalized = normalize_label_text(
@@ -186,11 +297,17 @@ class ObservationService:
     ) -> dict:
         """Observation + normalization + live re-derived tree."""
         chain = await self._chain(observation_id, role=role)
-        reparsed = parse_label_ingredients(chain["observation"]["raw_text"])
+        observation = chain["observation"]
+        effective = (
+            observation.get("display_text") or observation["raw_text"]
+        )
+        reparsed = parse_label_ingredients(effective)
         return {
-            "observation_id": chain["observation"]["id"],
-            "scan_id": chain["observation"]["scan_id"],
-            "raw_text": chain["observation"]["raw_text"],
+            "observation_id": observation["id"],
+            "scan_id": observation["scan_id"],
+            "raw_text": observation["raw_text"],
+            "display_text": observation.get("display_text"),
+            "user_corrected": bool(observation.get("user_corrected")),
             "normalized_text": chain["normalization"]["normalized_text"],
             "status": chain["normalization"]["status"],
             "tree": [n.to_dict() for n in reparsed.nodes],

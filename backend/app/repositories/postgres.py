@@ -366,7 +366,54 @@ class PostgresMatchRepository(_Bound):
         _require_read(role)
         norms = TABLES["ingredient_normalizations"]
         result = await self._conn.execute(
-            select(norms).where(norms.c.observation_id == observation_id)
+            select(norms)
+            .where(norms.c.observation_id == observation_id)
+            .order_by(norms.c.created_at.desc())
+            .limit(1)
+        )
+        row = result.first()
+        if row is None:
+            raise KeyError(observation_id)
+        return _row(row)
+
+    async def get_observation(
+        self,
+        observation_id: str,
+        *,
+        role: str = AUTHENTICATED_ROLE,
+    ) -> dict:
+        _require_read(role)
+        table = TABLES["ingredient_observations"]
+        result = await self._conn.execute(
+            select(table).where(table.c.id == observation_id)
+        )
+        row = result.first()
+        if row is None:
+            raise KeyError(observation_id)
+        return _row(row)
+
+    async def record_correction(
+        self,
+        observation_id: str,
+        *,
+        display_text: str,
+        original_text: str,
+        reason: str,
+        role: str = SERVICE_ROLE,
+    ) -> dict:
+        _require_write(role)
+        table = TABLES["ingredient_observations"]
+        result = await self._conn.execute(
+            update(table)
+            .where(table.c.id == observation_id)
+            .values(
+                display_text=display_text,
+                user_corrected=True,
+                original_text=original_text,
+                correction_reason=reason,
+                source_type="user_corrected",
+            )
+            .returning(table)
         )
         row = result.first()
         if row is None:

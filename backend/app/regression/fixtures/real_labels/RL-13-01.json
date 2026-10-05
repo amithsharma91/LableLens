@@ -1,0 +1,113 @@
+{
+  "label_id": "RL-13-01",
+  "domain": "beverage",
+  "product_name": "Coca-Cola Original Taste Soda",
+  "brand": "Coca-Cola",
+  "raw_text": "pledse recycle cans, cartons cts ainer fructose corn syrup 1 can phosphoric acid, natural carbonated water, high caramel color, flavors, caffeine,",
+  "input_method": "ocr",
+  "source_reference": {
+    "source_id": "OFF",
+    "source_class": "C",
+    "description": "Open Food Facts product record barcode 049000028904 (English), OCR ingredients_text as stored",
+    "url": "https://world.openfoodfacts.org/api/v2/product/049000028904.json",
+    "retrieved_at": "2026-10-05",
+    "license_note": "ODbL: attribution retained here; ingredient text transcribed verbatim, not modified"
+  },
+  "ground_truth_status": "OCR text is the observation; no corrected reading is asserted for this label",
+  "review_status": "draft",
+  "scope_note": "Poor-quality OCR fixture: proves verbatim preservation and no fabrication under garbled input. Nothing here may resolve.",
+  "expected_ingredients": [
+    {
+      "sequence": 0,
+      "raw": "pledse recycle cans",
+      "normalized": "pledse recycle cans",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN",
+      "note": "OCR packaging fragment, not an ingredient; stays unresolved"
+    },
+    {
+      "sequence": 1,
+      "raw": "cartons cts ainer fructose corn syrup 1 can phosphoric acid",
+      "normalized": "cartons cts ainer fructose corn syrup 1 can phosphoric acid",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN",
+      "note": "garbled OCR segment; phosphoric acid is not registered and the segment as a whole cannot resolve"
+    },
+    {
+      "sequence": 2,
+      "raw": "natural carbonated water",
+      "normalized": "natural carbonated water",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    },
+    {
+      "sequence": 3,
+      "raw": "high caramel color",
+      "normalized": "high caramel color",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    },
+    {
+      "sequence": 4,
+      "raw": "flavors",
+      "normalized": "flavors",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN",
+      "note": "generic non-molecular term; unresolved, never expanded"
+    },
+    {
+      "sequence": 5,
+      "raw": "caffeine",
+      "normalized": "caffeine",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN",
+      "note": "not in the canonical registry; stays unknown"
+    }
+  ],
+  "expected_counts": {
+    "ingredients": 6,
+    "exact_matches": 0,
+    "alias_matches": 0,
+    "candidate_matches": 0,
+    "unresolved": 6,
+    "verified": 0,
+    "provisional": 0,
+    "unverified": 0,
+    "conflicted": 0,
+    "unknown": 6
+  },
+  "expected_unknowns": [
+    "pledse recycle cans",
+    "cartons cts ainer fructose corn syrup 1 can phosphoric acid",
+    "natural carbonated water",
+    "high caramel color",
+    "flavors",
+    "caffeine"
+  ],
+  "expected_ambiguities": [
+    {
+      "normalized": "flavors",
+      "resolver_state": "unresolved",
+      "kind": "non-molecular generic term; the resolver emits unresolved, never an invented entity"
+    }
+  ],
+  "correction": null
+}

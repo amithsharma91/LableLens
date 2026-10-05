@@ -1,0 +1,204 @@
+{
+  "label_id": "RL-13-04",
+  "domain": "otc_drug",
+  "product_name": "Vicks NyQuil Cold & Flu (liquid)",
+  "brand": "Vicks (The Procter & Gamble Manufacturing Company)",
+  "raw_text": "alcohol, citric acid, FD&C Blue No. 1, FD&C Red No. 40, flavor, glycerin, propylene glycol, purified water, saccharin sodium, sodium benzoate, sodium citrate, sorbitol, sucralose, xanthan gum",
+  "input_method": "manual",
+  "source_reference": {
+    "source_id": "DAILYMED",
+    "source_class": "A",
+    "description": "FDA DailyMed SPL setId fc9e05a5-ca03-faa2-e053-6294a90a0d58, version 10, effective 2026-06-23; Inactive ingredients paragraph (LOINC 51727-6), transcribed verbatim in printed order",
+    "url": "https://dailymed.nlm.nih.gov/dailymed/services/v2/spls/fc9e05a5-ca03-faa2-e053-6294a90a0d58.xml",
+    "retrieved_at": "2026-10-05"
+  },
+  "ground_truth_status": "official FDA drug label; scope is the inactive-ingredients paragraph (actives acetaminophen / dextromethorphan HBr / doxylamine succinate are documented in the same SPL and excluded here by scope)",
+  "review_status": "draft",
+  "scope_note": "Inactive-ingredients paragraph only (14 ingredients). Drug actives are out of scope for this registry-focused slice.",
+  "expected_ingredients": [
+    {
+      "sequence": 0,
+      "raw": "alcohol",
+      "normalized": "alcohol",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN",
+      "note": "generic term; the SPL panel states Alcohol 10% elsewhere but the inactive paragraph gives no identity, so it stays unresolved"
+    },
+    {
+      "sequence": 1,
+      "raw": "citric acid",
+      "normalized": "citric acid",
+      "match_status": "exact_match",
+      "identity_confidence": "HIGH",
+      "entity_ref": "CANON-2671a263ff76",
+      "verification_status": "provisional",
+      "verification_confidence": "LOW"
+    },
+    {
+      "sequence": 2,
+      "raw": "FD&C Blue No. 1",
+      "normalized": "fd&c blue no. 1",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN",
+      "note": "certified color additive mixture; not registered; stays unknown"
+    },
+    {
+      "sequence": 3,
+      "raw": "FD&C Red No. 40",
+      "normalized": "fd&c red no. 40",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN",
+      "note": "certified color additive mixture; not registered; stays unknown"
+    },
+    {
+      "sequence": 4,
+      "raw": "flavor",
+      "normalized": "flavor",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN",
+      "note": "generic non-molecular term; unresolved, never expanded"
+    },
+    {
+      "sequence": 5,
+      "raw": "glycerin",
+      "normalized": "glycerin",
+      "match_status": "candidate",
+      "identity_confidence": "LOW",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN",
+      "note": "common synonym of glycerol but absent from the approved names; stays a candidate, never selected"
+    },
+    {
+      "sequence": 6,
+      "raw": "propylene glycol",
+      "normalized": "propylene glycol",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    },
+    {
+      "sequence": 7,
+      "raw": "purified water",
+      "normalized": "purified water",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    },
+    {
+      "sequence": 8,
+      "raw": "saccharin sodium",
+      "normalized": "saccharin sodium",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    },
+    {
+      "sequence": 9,
+      "raw": "sodium benzoate",
+      "normalized": "sodium benzoate",
+      "match_status": "exact_match",
+      "identity_confidence": "HIGH",
+      "entity_ref": "CANON-6223de871d0c",
+      "verification_status": "provisional",
+      "verification_confidence": "LOW"
+    },
+    {
+      "sequence": 10,
+      "raw": "sodium citrate",
+      "normalized": "sodium citrate",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    },
+    {
+      "sequence": 11,
+      "raw": "sorbitol",
+      "normalized": "sorbitol",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    },
+    {
+      "sequence": 12,
+      "raw": "sucralose",
+      "normalized": "sucralose",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    },
+    {
+      "sequence": 13,
+      "raw": "xanthan gum",
+      "normalized": "xanthan gum",
+      "match_status": "unresolved",
+      "identity_confidence": "UNKNOWN",
+      "entity_ref": null,
+      "verification_status": "unknown",
+      "verification_confidence": "UNKNOWN"
+    }
+  ],
+  "expected_counts": {
+    "ingredients": 14,
+    "exact_matches": 2,
+    "alias_matches": 0,
+    "candidate_matches": 1,
+    "unresolved": 11,
+    "verified": 0,
+    "provisional": 2,
+    "unverified": 0,
+    "conflicted": 0,
+    "unknown": 12
+  },
+  "expected_unknowns": [
+    "alcohol",
+    "fd&c blue no. 1",
+    "fd&c red no. 40",
+    "flavor",
+    "glycerin",
+    "propylene glycol",
+    "purified water",
+    "saccharin sodium",
+    "sodium citrate",
+    "sorbitol",
+    "sucralose",
+    "xanthan gum"
+  ],
+  "expected_ambiguities": [
+    {
+      "normalized": "alcohol",
+      "resolver_state": "unresolved",
+      "kind": "generic term; not mapped to ethanol"
+    },
+    {
+      "normalized": "flavor",
+      "resolver_state": "unresolved",
+      "kind": "non-molecular generic term"
+    }
+  ],
+  "correction": null
+}
