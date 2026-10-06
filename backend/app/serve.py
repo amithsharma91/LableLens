@@ -10,15 +10,17 @@ error when required production configuration is missing:
   authentication rules apply (real Supabase JWT verification,
   ``DEV_API_TOKENS`` refused, reviewer allowlist semantics).
 * Database connectivity is verified once at startup
-  (``SELECT 1``): an unreachable database refuses to boot
-  instead of serving degraded verification silently.
+  (``SELECT 1`` inside the ASGI lifespan, awaited): an unreachable
+  database refuses to boot instead of serving degraded
+  verification silently. No event loop is ever run at import or
+  build time, so this module is safe to load under Uvicorn (or
+  any running loop).
 
 Uvicorn target: ``app.serve:app``.
 """
 
 from __future__ import annotations
 
-import asyncio
 import os
 
 __all__ = ["app_from_env"]
@@ -42,8 +44,13 @@ def _require_env(name: str) -> str:
     return value
 
 
-def app_from_env(*, check_connectivity: bool = True, config=None):
+def app_from_env(*, config=None):
     """Build the staging application from the environment.
+
+    Synchronous factory: constructs objects only, never runs an
+    event loop, so it is safe to call (and this module safe to
+    import) while a loop is already running -- exactly the Render/
+    Uvicorn startup condition that ``asyncio.run`` violated.
 
     `config` accepts a fresh ``Settings`` for tests; production
     uses the global settings object.
@@ -77,10 +84,40 @@ def app_from_env(*, check_connectivity: bool = True, config=None):
                 endpoint=config.ocr_space_endpoint,
             )
         }
-    if check_connectivity:
-        asyncio.run(_check_connectivity(engine, database_url))
-    return create_app(engine=engine, ocr_providers=providers,
-                      config=config)
+    application = create_app(
+        engine=engine, ocr_providers=providers, config=config)
+    _wrap_lifespan(application, engine, database_url)
+    return application
+
+
+def _wrap_lifespan(application, engine, database_url: str) -> None:
+    """Run the SELECT 1 check inside the ASGI lifespan, awaited.
+
+    Uvicorn/Starlette dispatch lifespan through
+    ``application.router.lifespan_context`` (read dynamically at
+    Starlette 1.7.0, ``routing.py``), so replacing it preserves the
+    registry projection that ``create_app`` wired while adding, in
+    order: awaited connectivity gate (startup fails loudly on a
+    dead database) and engine disposal (clean shutdown). No second
+    engine is created; the same object is shared and closed once.
+    """
+    from contextlib import asynccontextmanager
+
+    previous = application.router.lifespan_context
+
+    @asynccontextmanager
+    async def lifespan(app):
+        await _check_connectivity(engine, database_url)
+        try:
+            if previous is None:
+                yield
+            else:
+                async with previous(app):
+                    yield
+        finally:
+            await engine.dispose()
+
+    application.router.lifespan_context = lifespan
 
 
 async def _check_connectivity(engine, database_url: str) -> None:

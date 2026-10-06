@@ -235,6 +235,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   OpenAPI secrets assertion, secret scans clean. `pip install`
   split into base + `[test]` extra (wheel build validated).
   Documented in `STAGE_18_5_DEPLOYMENT.md`; ADR-034.
+- Render startup fix: removed `asyncio.run()` from `app.serve`
+  `app_from_env()` (it crashed under Uvicorn's running loop);
+  the database SELECT 1 gate is now awaited inside the ASGI
+  lifespan (registry projection preserved, engine disposed on
+  shutdown, no second engine). No auth/RLS/ownership/rate-limit/
+  verification/registry behavior changed. Covered by a
+  running-loop factory regression test plus live-DB startup
+  tests.
 - Stage-18 schema-wide ownership + provider smoke path (V1–V7
   untouched): owner columns on all user-derived analysis tables
   (migration 006; writes inherit the data owner, never the

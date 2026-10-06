@@ -118,7 +118,12 @@ version, no secrets, no DB touch, no expensive work) — verified
 safe for any prober. There is deliberately NO public DB-touching
 readiness endpoint: liveness stays cheap, and database health is
 proven by the authenticated smoke checks (§15). A DB connectivity
-check runs once inside `app.serve` at boot (fail-fast, §9).
+check (`SELECT 1`) runs once inside the ASGI lifespan at startup
+— awaited, never via `asyncio.run()`, which crashes under
+Uvicorn's already-running loop (Render startup fix; the factory
+itself stays synchronous and import-safe). A dead database fails
+startup loudly instead of serving degraded verification; the
+engine is disposed on shutdown.
 
 ## 9. CORS
 
