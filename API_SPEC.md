@@ -2849,3 +2849,28 @@ The identity used for bucketing comes from the verified token; no
 header or body field can influence it. The shipped limiter is
 in-process and therefore per replica — a shared backend is the
 documented next step.
+
+---
+
+# 102. Stage-18 Access Matrix (2026-10-05)
+
+Every route requires authentication (401 without a bearer token).
+`owner` is the verified token subject; `reviewer` is the
+allowlisted reviewer role. Foreign or missing user-derived rows
+answer 404 `NOT_FOUND` (never a body distinguishing the two).
+
+| Endpoint | Auth | Owner rule | Reviewer rule |
+|---|---|---|---|
+| `POST /api/v1/ocr/runs` | yes | creator becomes owner | — |
+| `GET /api/v1/ocr/runs/{id}` | yes | owner or legacy-NULL, else 404 | — |
+| `POST /api/v1/ocr/runs/{id}/correction` | yes | run owner, else 404; one revision, repeat → 422 | — |
+| `POST /api/v1/ocr/runs/{id}/analyze` | yes | run owner, else 404 | — |
+| `POST /api/v1/observations` | yes | creator becomes owner | — |
+| `GET /api/v1/observations/{id}` (+ `candidates`, `resolution`, `verification`) | yes | owner or legacy-NULL, else 404 | — |
+| `POST /api/v1/observations/{id}/analyze` | yes | owner or legacy-NULL, else 404 | — |
+| `GET /api/v1/claims/{id}` | yes | shared chemistry truth (no owner), 404 if missing | — |
+| `GET /api/v1/reviews/pending`, `GET /api/v1/reviews/{id}` | yes | own + legacy-NULL, else 404 | reviewers see all |
+| `POST /api/v1/reviews/{id}/claim`, `.../decision` | reviewer only (403 otherwise) | reviewer workflow (no owner filter) | required |
+
+New error code: `OCR_PROVIDER_UNAVAILABLE` (§8 `503`) when the
+configured OCR provider fails; nothing is persisted on that path.

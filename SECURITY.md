@@ -459,3 +459,29 @@ Complete every item before deploying to a production or publicly accessible envi
 ## Reporting a Vulnerability
 
 If you discover a security issue in LabelLens, please report it responsibly. Do not open a public GitHub issue for security vulnerabilities. Contact the maintainers directly with a description of the issue and steps to reproduce. Allow reasonable time for a fix before any public disclosure.
+
+### Stage-18 Implemented Policies (2026-10-05)
+
+The tables above (`product_scans`, `comparisons`, …) do not exist
+yet; the policies below are what migrations 003–006 actually
+enforce. The service role bypasses RLS by design (backend-only,
+never exposed); every statement below concerns direct access as
+the `authenticated` role, where the subject travels in the
+`app.current_subject` session setting (unset matches nothing).
+
+| Table | Authenticated SELECT | Authenticated write |
+|---|---|---|
+| `ocr_runs`, `ocr_corrections` | owner only | denied (service role only) |
+| `ingredient_observations`, `ingredient_normalizations`, `ingredient_candidates`, `entity_matches`, `verification_decisions`, `reviews` | owner or legacy-NULL | denied (service role only) |
+| `claims`, `claim_sources`, `verification_events`, `review_events` | all authenticated (global audit / shared chemistry truth, no private content) | denied (service role only) |
+| `chemical_entities`, `ingredient_aliases`, `sources`, `domains`, `roles` | per pre-existing grants | denied (service role / import only) |
+
+Application layer (independent of RLS): every OCR, observation,
+verification, and review read compares the row owner against the
+verified principal and answers foreign rows as 404 (never 403
+with a distinguishing body), so resources cannot be enumerated.
+Reviewers (allowlisted role) bypass the owner filter through the
+API only — never at the database layer. Claims, reviews, and
+audit events carry no owner columns yet (residual gap, see
+`STAGE_18_DATA_ISOLATION_AND_PROVIDER_VALIDATION.md`); legacy
+NULL-owner rows keep prior readability and match no subject.

@@ -221,6 +221,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Stage-15 VERIFIED cases stay VERIFIED; false positives remain
   0. Documented in `STAGE_17_OCR_PROVIDER_AND_OWNERSHIP.md`;
   ADR-032.
+- Stage-18 schema-wide ownership + provider smoke path (V1–V7
+  untouched): owner columns on all user-derived analysis tables
+  (migration 006; writes inherit the data owner, never the
+  caller), RLS owner policies with retired permissive predecessors,
+  reviewer-visible/owner-scoped review queue (reviewers bypass via
+  API role check only), uniform 404 anti-enumeration, legacy
+  NULL-owner compatibility; claims/sources/events stay shared or
+  global by documented classification. OCR.space smoke command
+  (`app.cli.ocr_provider_smoke`, safe-metadata output only, never
+  called live here). Tests: 5 lineage unit, 3 API isolation, 5
+  smoke, extended live RLS. Documented in
+  `STAGE_18_DATA_ISOLATION_AND_PROVIDER_VALIDATION.md`; ADR-033.
 
 ### Fixed
 - `entity_matches.selected_at` and `claim_sources.retrieved_at`

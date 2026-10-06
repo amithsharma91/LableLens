@@ -2657,3 +2657,23 @@ the Stage-10 RLS rollout: they are canonical reference data, readable
 only with service-role credentials from this service. Enabling RLS on
 them is a Stage-13 candidate and is recorded here as a known gap, not
 an oversight.
+
+---
+
+# 77d. Stage-18 Ownership Classification (2026-10-05)
+
+Migration 006 adds nullable `owner_subject` (authenticated
+subject, never a token) to the user-derived analysis tables.
+Service writes always set it from the data owner; legacy NULL
+rows keep prior readability and match no subject.
+
+| Class | Tables | Rule |
+|---|---|---|
+| User-owned | `ocr_runs`, `ocr_corrections` (NOT NULL), `ingredient_observations`, `ingredient_normalizations`, `ingredient_candidates`, `entity_matches`, `verification_decisions`, `reviews` | owner-or-NULL SELECT for `authenticated`; writes service-role only |
+| Shared canonical | `chemical_entities`, `ingredient_aliases`, `sources`, `domains`, `roles` | unchanged design; never owner-scoped |
+| Shared by content | `claims`, `claim_sources`, `verification_events` | unchanged; claim identity is deterministic shared chemistry, never forked per user |
+| Global audit | `review_events` | unchanged; reachable via owned-or-reviewer review reads; no raw label text inside |
+
+Reviewer reads bypass the owner filter through the API only
+(allowlisted role); direct database access stays owner-scoped.
+Full matrix: `STAGE_18_DATA_ISOLATION_AND_PROVIDER_VALIDATION.md`.

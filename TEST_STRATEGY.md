@@ -823,3 +823,21 @@ false-positive count is asserted at exactly 0.
   unset sees nothing, all authenticated writes denied, legacy
   NULL rows visible). Migration 005 re-application is covered
   by the static migration tests after an idempotency fix.
+
+### Stage-18 extension (2026-10-06)
+
+- Ownership lineage tests: `app/tests/unit/test_analysis_ownership.py`
+  (derived-row owner inheritance across normalization/candidates/
+  match/decision/review, stranger-404 on every analysis view,
+  owner/reviewer/legacy review visibility).
+- API isolation tests: `app/tests/api/test_api_ownership.py`
+  (three-subject review queue scoping, reviewer workflow across
+  owners, verification/candidates/resolution isolation).
+- Live tests: `test_ocr_postgres.py` gains derived-table RLS
+  coverage (owner isolation per table, legacy NULL visibility,
+  write denial); all reset helpers apply migration 006; static
+  migration validation covers 003–006.
+- Smoke tests: `app/tests/unit/test_ocr_smoke.py` (NOT_CONFIGURED,
+  safe-output success, categorized failure, pipeline entry,
+  unreadable-image handling) — offline only, never calling a
+  live provider.

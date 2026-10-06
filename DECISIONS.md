@@ -1461,3 +1461,56 @@ analysis in `STAGE_17_OCR_PROVIDER_AND_OWNERSHIP.md`.
 - Auto-wiring the provider from env inside `create_app`: hides
   a credential-bearing decision inside a factory; explicit
   injection keeps it visible and testable.
+
+---
+
+## ADR-033 — Schema-Wide Analysis Ownership (Stage 18)
+
+**Status:** Accepted
+**Date:** 2026-10-06
+
+### Context
+
+Stage 17 isolated OCR runs, corrections, and observations, but
+everything downstream (normalizations, candidates, matches,
+decisions, reviews) stayed globally readable. A stranger who
+guessed an observation id could read another user's analysis.
+Full lineage in `STAGE_18_DATA_ISOLATION_AND_PROVIDER_VALIDATION.md`.
+
+### Decision
+
+1. Owner columns on all user-derived analysis tables
+   (normalizations, candidates, matches, decisions, reviews;
+   migration 006): writes inherit the data owner's subject,
+   never the caller's; legacy NULL rows keep prior readability.
+2. Canonical tables stay shared; claims/sources/verification
+   events stay shared-by-content (deterministic chemistry, never
+   forked); review events stay global audit without raw text.
+3. Reviews are owner-visible plus reviewer-visible: the
+   allowlisted reviewer role bypasses the owner filter through
+   the API only (direct database access stays owner-scoped), so
+   the queue workflow survives without symmetry theater.
+4. RLS mirrors the model with default-deny writes; the 003-era
+   permissive policies on newly-scoped tables were retired
+   (permissive policies combine with OR and would have silently
+   preserved global readability).
+5. Foreign rows answer 404 everywhere, uniformly.
+
+### Consequences
+
+- Cross-user reads and writes fail at both layers; negative
+  tests cover every user-derived route plus direct database
+  access.
+- Reviewers keep full queue function; ordinary users see only
+  their own items.
+- The remaining unowned surface (claims, reviews' audit trail,
+  legacy NULL rows) is explicit and documented, not accidental.
+
+**Rejected alternatives:**
+- Forking claims per user: claim identity is shared chemistry;
+  per-user copies would fragment canonical truth.
+- 403 on foreign rows: enables resource enumeration; 404 is the
+  established convention.
+- Reviewer role expressed in RLS: roles are not database
+  principals here; the API checks the role, the database checks
+  the owner.
