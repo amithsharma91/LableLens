@@ -1514,3 +1514,61 @@ Full lineage in `STAGE_18_DATA_ISOLATION_AND_PROVIDER_VALIDATION.md`.
 - Reviewer role expressed in RLS: roles are not database
   principals here; the API checks the role, the database checks
   the owner.
+
+---
+
+## ADR-034 — Staging Deployment Posture (Stage 18.5)
+
+**Status:** Accepted
+**Date:** 2026-10-06
+
+### Context
+
+Stages 2–18 proved the backend locally, but no artifact could
+produce a running staging service: no Dockerfile, no entrypoint
+that fails closed, no migration procedure, no smoke coverage.
+Stage 18.5 builds all of it for Cloud Run (`asia-south1`) without
+executing the deployment (no credentials in this environment).
+Full record in `STAGE_18_5_DEPLOYMENT.md`.
+
+### Decision
+
+1. Docker image (`backend/Dockerfile`): `python:3.13-slim`,
+   production dependencies only (new `[test]` extra),
+   non-root user, uvicorn `app.serve:app` on `$PORT`, single
+   worker (process-local limiter stays exact).
+2. `app.serve` entrypoint: explicit `DATABASE_URL`, mandatory
+   `ENVIRONMENT=production`, one `SELECT 1` connectivity gate,
+   optional OCR provider injection — any gap raises at boot,
+   never degrades silently. Import-safe for tests via lazy `app`.
+3. Migrations via ledgered `scripts/migrate_staging.sh`
+   (apply/`--check`/`--baseline`, forward-only, verified
+   locally fresh + idempotent + baselined); never on boot.
+4. Staging pins max 1 instance (limiter semantics), min 0,
+   1vCPU/512Mi, Secret Manager references, empty CORS
+   allow-list, public invocation with app-enforced JWT auth.
+5. Smoke coverage without a deployment: construction/fail-closed
+   unit tests, offline-tested `scripts/smoke_staging.py` (13
+   checks incl. leak detection), secret scans, OpenAPI
+   secrets assertion.
+
+### Consequences
+
+- An operator with GCP + Supabase staging credentials can deploy
+  by following one document; nothing else needs inventing.
+- Status is honestly PARTIAL: no public URL, no remote smoke
+  result, no live provider call. Stage 19 RDKit is unblocked
+  (pure backend work), with deployment execution remaining an
+  operator action.
+
+**Rejected alternatives:**
+- Auto-running migrations on boot: couples deploys to schema
+  mutation and hides failures; explicit operation instead.
+- Pooled connections with defaults: stale pools across
+  scale-to-zero idles; NullPool per-request matches the
+  existing connection pattern.
+- IAM-closed service: would prevent external verification of
+  the app's own 401 boundary; app auth remains the boundary.
+- Committing a dependency lock from this environment: exotic
+  platform, likely wrong for Cloud Run; fresh resolve at build
+  with a follow-up constraints task instead.

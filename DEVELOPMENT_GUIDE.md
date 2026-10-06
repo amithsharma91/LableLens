@@ -431,8 +431,21 @@ render deploy --service <service-id>
 - Verify the health endpoint after every production deploy:
 
   ```bash
-  curl https://<backend-domain>/health
+  curl https://<backend-domain>/api/v1/health
   ```
+
+### Backend staging (Cloud Run, Stage 18.5)
+
+Staging deploys the Docker image to Cloud Run (`asia-south1`)
+instead of a generic Python host; the Railway/Render sketch
+above remains an alternative, not the plan of record. Install
+with test extras locally (`pip install -e ".[test]"`); production
+images install the base set only. Before deploying: apply
+migrations explicitly (`scripts/migrate_staging.sh`), never on
+boot; staging requires `ENVIRONMENT=production` plus a real
+`DATABASE_URL` or `app.serve` refuses to start. Smoke with
+`scripts/smoke_staging.py` (needs operator JWTs; never in CI).
+Full procedure: `STAGE_18_5_DEPLOYMENT.md`.
 
 ### Rollback
 

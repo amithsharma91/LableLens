@@ -762,6 +762,23 @@ Image uploads validate: MIME type, file extension, file size, image dimensions, 
 
 Backend secrets (provider API keys, database credentials) are set as server environment variables. The frontend holds no secrets. CORS is restricted to the known frontend origin. Security headers are applied.
 
+### Stage-18.5 staging backend (demonstrated artifacts, deployment pending)
+
+The first concrete backend target is Google Cloud Run
+(`labellens-api-staging`, `asia-south1`): Docker image
+(`backend/Dockerfile`, production deps only, non-root, uvicorn
+`app.serve:app` on `$PORT`, single worker), `scripts/
+deploy_staging.sh` (max 1 instance, min 0, Secret Manager
+references, no secret values in repo or logs),
+`scripts/migrate_staging.sh` (ledgered 001–006 application with
+`--check`/`--baseline`, never on boot), and
+`scripts/smoke_staging.py` (13 manual checks, stdlib only). Full
+procedure, secret handling, CORS posture (empty allow-list until
+the Vercel origin exists), rollback, and cost controls:
+`STAGE_18_5_DEPLOYMENT.md`. Status at writing: artifacts complete
+and locally validated; no Cloud Run deployment executed (no GCP
+credentials in this environment) — PARTIAL by mission rule.
+
 ---
 
 ## 13. Security Boundaries

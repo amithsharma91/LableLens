@@ -118,6 +118,16 @@ isolated by RLS owner policies with default-deny writes; legacy
 NULL-owner rows keep prior readability. Claims/reviews/audit
 events remain unowned (open gap, see `STAGE_17_OCR_PROVIDER_AND_OWNERSHIP.md`).
 
+### Stage-18 implementation note (2026-10-06)
+Ownership extends down the analysis chain (migration 006):
+normalizations, candidates, matches, decisions, and reviews carry
+the data owner's subject (writes inherit it, never the caller);
+claims/sources/events stay shared-or-global by classification;
+reviewers bypass the owner filter through the API role check
+only. RLS enforces the same model with default-deny writes;
+legacy NULL rows match no subject. See
+`STAGE_18_DATA_ISOLATION_AND_PROVIDER_VALIDATION.md`.
+
 ---
 
 ## Stage 2 — Ingredient Extraction

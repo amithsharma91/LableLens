@@ -221,6 +221,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Stage-15 VERIFIED cases stay VERIFIED; false positives remain
   0. Documented in `STAGE_17_OCR_PROVIDER_AND_OWNERSHIP.md`;
   ADR-032.
+- Stage-18.5 staging deployment artifacts (PARTIAL — no GCP or
+  Supabase staging credentials in this environment, so no remote
+  deployment was executed): production Dockerfile (base deps only,
+  non-root, uvicorn `app.serve:app`, single worker), fail-closed
+  `app.serve` entrypoint (explicit DATABASE_URL, mandatory
+  ENVIRONMENT=production, startup connectivity gate, optional OCR
+  injection), ledgered `scripts/migrate_staging.sh`
+  (apply/--check/--baseline, verified fresh + idempotent +
+  baselined locally), `scripts/deploy_staging.sh` (Cloud Run
+  asia-south1, max 1, Secret Manager references), offline-tested
+  `scripts/smoke_staging.py` (13 checks incl. leak detection),
+  OpenAPI secrets assertion, secret scans clean. `pip install`
+  split into base + `[test]` extra (wheel build validated).
+  Documented in `STAGE_18_5_DEPLOYMENT.md`; ADR-034.
 - Stage-18 schema-wide ownership + provider smoke path (V1–V7
   untouched): owner columns on all user-derived analysis tables
   (migration 006; writes inherit the data owner, never the

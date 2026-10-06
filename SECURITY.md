@@ -485,3 +485,27 @@ API only — never at the database layer. Claims, reviews, and
 audit events carry no owner columns yet (residual gap, see
 `STAGE_18_DATA_ISOLATION_AND_PROVIDER_VALIDATION.md`); legacy
 NULL-owner rows keep prior readability and match no subject.
+
+### Stage-18.5 Staging Posture (2026-10-06)
+
+- Staging boots only with `ENVIRONMENT=production`: Supabase JWT
+  verification is mandatory and `DEV_API_TOKENS` refuses to build
+  (construction tests in `test_serve.py`). There is no dev-mode
+  fallback on the staging entrypoint.
+- Secrets travel as Secret Manager references (`--update-secrets`);
+  none are committed, baked into the image (`.dockerignore`
+  excludes `.env`; no secret `ENV`), printed (deploy script
+  avoids `set -x`; smoke output is asserted secret-free), or
+  served (OpenAPI schema asserted secret-free; `/docs` stays
+  enabled on staging because schemas carry no secrets).
+- Cloud Run invocation is public so the app's own JWT boundary is
+  externally testable; every data route still requires a valid
+  bearer token. CORS allow-list ships empty (no browser origin
+  accepted until the Vercel origin exists).
+- Single instance + single worker keeps the process-local rate
+  limiter exact; multi-instance scaling remains blocked on a
+  shared limiter.
+- Live deployment was not executed from this environment (no GCP
+  or Supabase staging credentials); posture above is implemented
+  and locally validated, not remotely proven. Full procedure and
+  rollback: `STAGE_18_5_DEPLOYMENT.md`.
