@@ -12,17 +12,18 @@ from fastapi.testclient import TestClient
 from app.main import create_app
 from app.repositories.memory import MemoryUnitOfWork
 from app.services.ocr_provider import FakeOCRProvider, OCRResult
+from app.services.verification.adapters.snapshot import SnapshotAdapter
 from app.tests.api.helpers import (
     READER,
     REVIEWER1,
+    SNAPSHOT_PATH,
     auth,
     envelope,
+    make_app,
     register_snapshot_entities,
     registry,
     verifier,
 )
-from app.services.verification.adapters.snapshot import SnapshotAdapter
-from app.tests.api.helpers import SNAPSHOT_PATH
 
 
 def _app(providers=None):
@@ -280,6 +281,22 @@ def test_cross_user_observation_read_is_not_found():
         "/api/v1/observations/%s" % observation_id,
         headers=auth(READER)))["observation"][
             "observation_id"] == observation_id
+
+
+def test_openapi_has_no_secrets_and_docs_served():
+    client, _ = make_app()
+    response = client.get("/openapi.json")
+    assert response.status_code == 200
+    text = response.text.lower()
+    # Credential shapes and placeholders must never reach the
+    # published schema (generic words like "token" are intentionally
+    # not asserted: descriptions may legitimately use them).
+    for token in ("service-role-key", "service_role",
+                  "begin private", "postgres://",
+                  "ocr_space_api_key", "dummy-key"):
+        assert token not in text, token
+    docs = client.get("/docs")
+    assert docs.status_code == 200
 
 
 def test_unknown_provider_is_422_and_failing_provider_is_503():

@@ -17,9 +17,20 @@ dependencies = [
     "sqlalchemy",
     "asyncpg",
     "greenlet",
-    "pytest",
-    "pytest-asyncio",
     "httpx",
     # Supabase asymmetric JWT verification (JWKS signature validation).
     "pyjwt[crypto]"
 ]
+
+[project.optional-dependencies]
+# Test-only dependencies. Local development installs `.[test]`;
+# production images install the base set only.
+test = [
+    "pytest",
+    "pytest-asyncio",
+]
+
+[tool.setuptools.packages.find]
+# The backend is a PEP 420 namespace layout (no __init__.py);
+# declare the app package explicitly so `pip install .` builds.
+include = ["app*"]

@@ -1,0 +1,15 @@
+# Keep the staging image to runtime code + data only.
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.coverage
+htmlcov/
+.env
+*.log
+.git/
+frontend/
+*.md
+backend/app/tests/
+.DS_Store

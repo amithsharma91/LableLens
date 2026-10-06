@@ -37,11 +37,13 @@ def _default_snapshot_path() -> str:
     return str(candidate) if candidate.exists() else ""
 
 
-def _configured_verifier():
+def _configured_verifier(config=None):
     """Configured verifier; production fails closed at construction."""
     from app.api.auth import build_token_verifier
 
-    return build_token_verifier(settings)
+    # Bare `settings` (not an import-time binding) so tests can
+    # monkeypatch app.main.settings with a production config.
+    return build_token_verifier(config or settings)
 
 
 class ServiceScopeMiddleware(BaseHTTPMiddleware):
@@ -207,6 +209,7 @@ def create_app(
     engine=None,
     rate_limiter=None,
     ocr_providers=None,
+    config=None,
 ) -> FastAPI:
     """Build the FastAPI application with injected boundaries.
 
@@ -216,14 +219,19 @@ def create_app(
     registry stays empty, which resolves nothing rather than
     inventing candidates. A re-run of the import requires a restart
     to become visible to the resolver.
+
+    `config` overrides the global settings (tests and the
+    production entrypoint); when omitted the module-global
+    settings apply (monkeypatchable as app.main.settings).
     """
+    config = config or settings
     # One holder shared by the startup hook and the request factory, so
     # the registry loaded at startup is the one every request sees.
     if engine is not None and not isinstance(registry, _RegistryHolder):
         registry = _RegistryHolder(registry)
     application = FastAPI(
         title="LabelLens API",
-        version=settings.version,
+        version=config.version,
         lifespan=_registry_lifespan(engine, registry),
     )
 
@@ -235,7 +243,7 @@ def create_app(
 
     origins = [
         origin.strip()
-        for origin in settings.allowed_origins.split(",")
+        for origin in config.allowed_origins.split(",")
         if origin.strip()
     ]
     application.add_middleware(
@@ -249,7 +257,8 @@ def create_app(
     register_handlers(application)
 
     application.state.token_verifier = (
-        verifier if verifier is not None else _configured_verifier())
+        verifier if verifier is not None
+        else _configured_verifier(config))
     if rate_limiter is not None:
         application.state.rate_limiter = rate_limiter
 
