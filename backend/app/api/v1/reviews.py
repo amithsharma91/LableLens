@@ -10,7 +10,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, Request
 
-from app.api.auth import Principal, require_authenticated, require_reviewer
+from app.api.auth import (
+    ROLE_REVIEWER,
+    Principal,
+    require_authenticated,
+    require_reviewer,
+)
 from app.api.dependencies import review_service
 from app.api.errors import ERROR_RESPONSES, ApiError
 from app.api.limits import limited
@@ -72,10 +77,15 @@ async def list_pending(
     page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     principal: Principal = Depends(require_authenticated),
 ):
-    """Bounded pagination; repository order is authoritative."""
+    """Bounded pagination; repository order is authoritative.
+
+    Reviewers see the whole queue; other callers see only their own
+    rows (plus legacy rows without an owner).
+    """
     service = _services(request)
     result = await service.list_pending(
-        page=page, page_size=page_size)
+        page=page, page_size=page_size, owner=principal.subject,
+        reviewer=principal.role == ROLE_REVIEWER)
     return {
         "data": [_summary(r).model_dump() for r in result["items"]],
         "meta": CollectionMeta(
@@ -106,7 +116,9 @@ async def get_review(
     """Review plus append-only events (read-only)."""
     service = _services(request)
     try:
-        result = await service.get(review_id)
+        result = await service.get(
+            review_id, owner=principal.subject,
+            reviewer=principal.role == ROLE_REVIEWER)
     except _service_errors.NotFoundError:
         raise ApiError(404, "NOT_FOUND", "review not found")
     row = result["review"]

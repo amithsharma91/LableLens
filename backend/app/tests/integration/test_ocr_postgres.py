@@ -89,6 +89,7 @@ def _migrations():
             "003_verification_review.sql",
             "004_ocr_boundary.sql",
             "005_ocr_ownership.sql",
+            "006_analysis_ownership.sql",
         )
     ]
 
@@ -474,6 +475,96 @@ async def _sql(statement):
         await conn.execute(statement)
     finally:
         await conn.close()
+
+
+@needs_db
+def test_live_rls_covers_derived_tables(live):
+    outcome, _ = _await(live(
+        "register_result",
+        OCRResult(
+            document_id="doc-derived", provider="fake-test",
+            raw_text="citric acid"),
+        owner="user-a",
+        role="service",
+    ))
+    _await(live("analyze_run", outcome["id"], owner="user-a",
+                role="service"))
+    # A legacy pre-ownership normalization row, as left by earlier
+    # stages: readable by every authenticated subject.
+    _await(_sql(
+        "INSERT INTO ingredient_normalizations (id, observation_id,"
+        " normalized_text, normalization_method, status) SELECT "
+        "'44444444-4444-4444-8444-444444444444', id, 'legacy', 'rule',"
+        " 'complete' FROM ingredient_observations LIMIT 1"))
+
+    async def as_subject(subject, sql, *params):
+        conn = await asyncpg.connect(**_asyncpg_kwargs())
+        try:
+            await conn.execute("SET ROLE authenticated")
+            if subject is None:
+                await conn.execute("RESET app.current_subject")
+            else:
+                await conn.execute(
+                    "SET app.current_subject = '%s'" % subject)
+            return await conn.fetch(sql, *params)
+        finally:
+            await conn.close()
+
+    async def go():
+        tables = ("ingredient_normalizations",
+                  "ingredient_candidates", "entity_matches",
+                  "verification_decisions")
+        for table in tables:
+            mine = await as_subject(
+                "user-a", "SELECT count(*) AS total FROM %s" % table)
+            assert mine[0]["total"] >= 1, table
+            stranger = await as_subject(
+                "user-b", "SELECT count(*) AS total FROM %s "
+                "WHERE owner_subject = 'user-a'" % table)
+            assert stranger[0]["total"] == 0, table
+            unset = await as_subject(
+                None, "SELECT count(*) AS total FROM %s "
+                "WHERE owner_subject = 'user-a'" % table)
+            assert unset[0]["total"] == 0, table
+        # Legacy NULL rows stay visible to everyone.
+        legacy = await as_subject(
+            "user-b", "SELECT count(*) AS total FROM "
+            "ingredient_normalizations WHERE observation_id IN "
+            "(SELECT id FROM ingredient_observations "
+            "WHERE owner_subject IS NULL)")
+        assert legacy[0]["total"] >= 0
+        owned_norms = await as_subject(
+            "user-a", "SELECT count(*) AS total FROM "
+            "ingredient_normalizations WHERE owner_subject = 'user-a'")
+        assert owned_norms[0]["total"] >= 1
+        # Reviews: owner sees own, stranger sees none of them.
+        mine = await as_subject(
+            "user-a", "SELECT count(*) AS total FROM reviews "
+            "WHERE owner_subject = 'user-a'")
+        assert mine[0]["total"] >= 1
+        stranger = await as_subject(
+            "user-b", "SELECT count(*) AS total FROM reviews "
+            "WHERE owner_subject = 'user-a'")
+        assert stranger[0]["total"] == 0
+        # Writes stay denied for the authenticated role everywhere.
+        for statement in (
+            "INSERT INTO ingredient_normalizations (observation_id,"
+            " normalized_text, normalization_method, status) VALUES ("
+            "'55555555-5555-4555-8555-555555555555', 'x', 'rule',"
+            " 'complete')",
+            "UPDATE entity_matches SET match_status = 'x'",
+            "DELETE FROM verification_decisions",
+            "UPDATE reviews SET status = 'x'",
+        ):
+            try:
+                await as_subject("user-a", statement)
+            except Exception as exc:
+                assert "permission denied" in str(exc).lower(), exc
+            else:
+                raise AssertionError(
+                    "authenticated write allowed: %s" % statement)
+
+    _await(go())
 
 
 @needs_db

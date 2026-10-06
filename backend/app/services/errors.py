@@ -30,6 +30,18 @@ class NotFoundError(ServiceError, KeyError):
     """Referenced record does not exist (HTTP 404)."""
 
 
+def require_owner_match(row_owner, owner, *, resource="record") -> None:
+    """Refuse foreign owned rows as not-found (anti-enumeration).
+
+    `owner` is the authenticated caller (None = internal/legacy
+    caller, no check). Rows without an owner predate ownership and
+    keep legacy readability. Anything else that mismatches answers
+    exactly like a missing row so callers cannot probe for it.
+    """
+    if owner is not None and row_owner is not None and row_owner != owner:
+        raise NotFoundError("%s not found" % resource)
+
+
 class StaleError(ServiceError, ValueError):
     """Evidence changed since the operation's basis (HTTP 409)."""
 

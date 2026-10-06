@@ -92,6 +92,7 @@ def _migrations():
             "003_verification_review.sql",
             "004_ocr_boundary.sql",
             "005_ocr_ownership.sql",
+            "006_analysis_ownership.sql",
         )
     ]
 

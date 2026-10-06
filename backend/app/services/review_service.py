@@ -85,7 +85,8 @@ class ReviewService:
     # -- submission ------------------------------------------------------
 
     async def submit(
-        self, decision, resolution, records, *, role: str = "service"
+        self, decision, resolution, records, *,
+        owner: Optional[str] = None, role: str = "service",
     ) -> Optional[str]:
         """Route a live decision for review; persist when routed."""
         for _attempt in range(1000):
@@ -102,16 +103,21 @@ class ReviewService:
                 existing = None
             if existing is None or existing.get(
                     "candidate_key") == item.candidate_key:
-                await self._persist_item(item, self._queue, role=role)
+                await self._persist_item(
+                    item, self._queue, owner=owner, role=role)
                 return item.review_id
             # Persisted row from a previous process owns this ID and
             # differs: advance the counter and mint the next one.
             continue
         raise _errors.ServiceError("review id space exhausted")
 
-    async def _persist_item(self, item, queue, *, role: str) -> None:
-        await self._repos.reviews.submit_review(
-            review_to_row(item), role=role)
+    async def _persist_item(
+        self, item, queue, *, owner: Optional[str] = None,
+        role: str = "service",
+    ) -> None:
+        row = review_to_row(item)
+        row["owner_subject"] = owner
+        await self._repos.reviews.submit_review(row, role=role)
         for event in queue.events_for(item.review_id)[1:]:
             await self._repos.reviews.append_event(
                 review_event_to_row(event), role=role)
@@ -120,10 +126,22 @@ class ReviewService:
 
     async def list_pending(
         self, *, page: int = 1, page_size: int = 20,
+        owner: Optional[str] = None, reviewer: bool = False,
         role: str = "authenticated",
     ) -> dict:
-        """Open reviews in deterministic priority order, paginated."""
+        """Open reviews in deterministic priority order, paginated.
+
+        Reviewers see the whole queue (the allowlisted-operator
+        workflow); everyone else sees only their own rows plus
+        legacy rows without an owner.
+        """
         rows = await self._repos.reviews.list_pending(role=role)
+        if not reviewer:
+            rows = [
+                row for row in rows
+                if row.get("owner_subject") is None
+                or row.get("owner_subject") == owner
+            ]
         total = len(rows)
         start = (page - 1) * page_size
         return {
@@ -132,11 +150,16 @@ class ReviewService:
         }
 
     async def get(
-        self, review_id: str, *, role: str = "authenticated"
+        self, review_id: str, *, owner: Optional[str] = None,
+        reviewer: bool = False, role: str = "authenticated",
     ) -> dict:
         """One review with its event history."""
         try:
             row = await self._repos.reviews.get_review(review_id, role=role)
+            if not reviewer:
+                _errors.require_owner_match(
+                    row.get("owner_subject"), owner,
+                    resource="review")
             events = await self._repos.reviews.list_events(
                 review_id, role=role)
         except KeyError:

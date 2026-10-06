@@ -185,8 +185,9 @@ class OCRService:
             stored = await self._repos.ocr.get_run(run_id, role=role)
         except KeyError:
             raise _errors.NotFoundError("ocr run not found")
-        ObservationService._require_owner(
-            stored.get("owner_subject"), owner)
+        _errors.require_owner_match(
+            stored.get("owner_subject"), owner,
+            resource="observation")
         try:
             await self._repos.ocr.get_correction(run_id, role=role)
         except KeyError:
@@ -214,8 +215,8 @@ class OCRService:
             run = await self._repos.ocr.get_run(run_id, role=role)
         except KeyError:
             raise _errors.NotFoundError("ocr run not found")
-        ObservationService._require_owner(
-            run.get("owner_subject"), owner)
+        _errors.require_owner_match(
+            run.get("owner_subject"), owner, resource="ocr run")
         try:
             correction = await self._repos.ocr.get_correction(
                 str(run_id), role=role)
@@ -313,8 +314,8 @@ class OCRService:
             run = await self._repos.ocr.get_run(run_id, role=role)
         except KeyError:
             raise _errors.NotFoundError("ocr run not found")
-        ObservationService._require_owner(
-            run.get("owner_subject"), owner)
+        _errors.require_owner_match(
+            run.get("owner_subject"), owner, resource="ocr run")
         try:
             correction = await self._repos.ocr.get_correction(
                 str(run_id), role=role)

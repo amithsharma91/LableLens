@@ -127,6 +127,7 @@ def decision_to_row(
     *,
     candidate_key: str,
     entity_match_id: Optional[str] = None,
+    owner_subject: Optional[str] = None,
 ) -> dict:
     """Serialize a VerificationDecision to a verification_decisions row."""
     gate_results = [
@@ -152,6 +153,7 @@ def decision_to_row(
         "reason": decision.reason,
         "warnings": list(decision.warnings),
         "gate_results": gate_results,
+        "owner_subject": owner_subject,
     }
 
 
@@ -314,6 +316,7 @@ def review_to_row(item: object) -> dict:
         "priority": _get(item, "priority"),
         "status": _get(item, "status"),
         "reviewer": _get(item, "reviewer"),
+        "owner_subject": _get(item, "owner_subject"),
     }
 
 
@@ -401,7 +404,7 @@ def observation_row(
 def normalization_row(
     *, normalization_id: str, observation_id: str, normalized_text: str,
     method: str = "rule", version: str = "1.0.0",
-    status: str = "complete",
+    status: str = "complete", owner_subject: Optional[str] = None,
 ) -> dict:
     """Serialize one normalized node to ingredient_normalizations."""
     return {
@@ -412,11 +415,13 @@ def normalization_row(
         "normalizer_version": version,
         "confidence": None,
         "status": status,
+        "owner_subject": owner_subject,
     }
 
 
 def candidate_rows(
     resolution: Resolution, *, normalization_id: str,
+    owner_subject: Optional[str] = None,
 ) -> List[dict]:
     """Serialize Stage-5 candidates (registry refs stay in reasons)."""
     rows = []
@@ -448,6 +453,7 @@ def candidate_rows(
                     ),
                 },
                 "source_id": None,
+                "owner_subject": owner_subject,
             }
         )
     return rows
@@ -456,6 +462,7 @@ def candidate_rows(
 def match_row(
     resolution: Resolution, *, match_id: Optional[str] = None,
     normalization_id: str, selected_by: str = "deterministic",
+    owner_subject: Optional[str] = None,
 ) -> dict:
     """Serialize a Stage-5 resolution to an entity_matches row."""
     return {
@@ -478,6 +485,7 @@ def match_row(
         "reason_code": "; ".join(resolution.methods or []),
         "review_status": None,
         "review_notes": None,
+        "owner_subject": owner_subject,
     }
 
 

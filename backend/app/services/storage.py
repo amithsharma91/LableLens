@@ -67,11 +67,19 @@ async def store_verification_decision(
     match_id: Optional[str],
     candidate_key: str,
     *,
+    owner_subject: Optional[str] = None,
     role: str = "service",
 ) -> dict:
-    """Persist a decision with its claims and evidence links."""
+    """Persist a decision with its claims and evidence links.
+
+    The decision row inherits the analyzed observation's owner.
+    Claims, sources, and links stay owner-free by design: claim
+    identity is deterministic shared chemistry content, never
+    per-user state.
+    """
     row = decision_to_row(
-        decision, candidate_key=candidate_key, entity_match_id=match_id
+        decision, candidate_key=candidate_key, entity_match_id=match_id,
+        owner_subject=owner_subject,
     )
     row["id"] = verification_id_for(
         candidate_key,

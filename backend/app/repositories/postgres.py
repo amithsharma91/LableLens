@@ -98,6 +98,7 @@ _register(Table(
     Column("normalizer_version", Text),
     Column("confidence", NUMERIC),
     Column("status", Text, nullable=False),
+    Column("owner_subject", Text),
     _ts("created_at"), _ts("updated_at"),
 ))
 
@@ -111,6 +112,7 @@ _register(Table(
     Column("candidate_score", NUMERIC),
     Column("match_reasons", JSONB),
     Column("source_id", PG_UUID(as_uuid=False)),
+    Column("owner_subject", Text),
     _ts("created_at"),
 ))
 
@@ -126,6 +128,7 @@ _register(Table(
     Column("reason_code", Text),
     Column("review_status", Text),
     Column("review_notes", Text),
+    Column("owner_subject", Text),
     _ts("created_at"), _ts("updated_at"),
 ))
 
@@ -199,6 +202,7 @@ _register(Table(
     Column("warnings", JSONB),
     Column("gate_results", JSONB),
     Column("claim_ids", JSONB),
+    Column("owner_subject", Text),
     _ts("created_at"),
 ))
 
@@ -216,6 +220,7 @@ _register(Table(
     Column("priority", Integer, nullable=False),
     Column("status", Text, nullable=False),
     Column("reviewer", Text),
+    Column("owner_subject", Text),
     _ts("created_at"), _ts("updated_at"),
 ))
 

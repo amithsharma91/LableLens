@@ -158,6 +158,7 @@ class ObservationService:
                     method=NORMALIZER_METHOD,
                     version=NORMALIZER_VERSION,
                     status=normalized.status,
+                    owner_subject=owner,
                 ),
                 role=role,
             )
@@ -209,7 +210,9 @@ class ObservationService:
                 observation_id, role=role)
         except KeyError:
             raise _errors.NotFoundError("observation not found")
-        self._require_owner(stored.get("owner_subject"), owner)
+        _errors.require_owner_match(
+            stored.get("owner_subject"), owner,
+            resource="observation")
         if stored.get("user_corrected"):
             raise _errors.ServiceError("observation already corrected")
         updated = await self._repos.matches.record_correction(
@@ -234,6 +237,7 @@ class ObservationService:
                 method=NORMALIZER_METHOD,
                 version=NORMALIZER_VERSION,
                 status=normalized.status,
+                owner_subject=stored.get("owner_subject"),
             ),
             role=role,
         )
@@ -270,14 +274,15 @@ class ObservationService:
             raise _errors.ServiceError("normalization produced nothing")
         node = normalized.nodes[0]
         resolution = resolve_node(node, self._registry)
+        data_owner = chain["observation"].get("owner_subject")
         match_id = await self._repos.matches.save_match(
             match_row(resolution, normalization_id=chain[
-                "normalization"]["id"]),
+                "normalization"]["id"], owner_subject=data_owner),
             role=role,
         )
         await self._repos.matches.save_candidates(
             candidate_rows(resolution, normalization_id=chain[
-                "normalization"]["id"]),
+                "normalization"]["id"], owner_subject=data_owner),
             role=role,
         )
         combined = CombinedAdapter(list(self._adapters))
@@ -285,12 +290,13 @@ class ObservationService:
         stored = await store_verification_decision(
             self._repos, decision, match_id,
             self._candidate_key(resolution),
+            owner_subject=data_owner,
         )
         review_id = None
         if self._review_service is not None:
             records = combined.lookup_identity(resolution) or []
             review_id = await self._review_service.submit(
-                decision, resolution, records)
+                decision, resolution, records, owner=data_owner)
         return {
             "observation_id": observation_id,
             "match_id": match_id,
@@ -449,24 +455,10 @@ class ObservationService:
                 norm["id"], role=role)
         except KeyError:
             raise _errors.NotFoundError("observation not found")
-        self._require_owner(
-            chain["observation"].get("owner_subject"), owner)
+        _errors.require_owner_match(
+            chain["observation"].get("owner_subject"), owner,
+            resource="observation")
         return chain
-
-    @staticmethod
-    def _require_owner(row_owner, owner: Optional[str]) -> None:
-        """Refuse foreign owned rows as not-found (anti-enumeration).
-
-        Rows without an owner predate ownership and keep legacy
-        readability; rows owned by another subject answer exactly
-        like missing rows so callers cannot probe for them.
-        """
-        if (
-            owner is not None
-            and row_owner is not None
-            and row_owner != owner
-        ):
-            raise _errors.NotFoundError("observation not found")
 
     @staticmethod
     def _candidate_key(resolution) -> str:
