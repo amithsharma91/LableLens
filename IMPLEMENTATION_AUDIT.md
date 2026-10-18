@@ -136,12 +136,16 @@ arbitrary JSON into `ocr_runs`.
 mode branch at line 79 — while the header promises "Changes nothing". Then
 `verify_schema && echo …` is followed by an unconditional `exit 0`, so a drifted schema
 still returns success to any gate keying on exit status.
+**Status: RESOLVED by TASK 0.2 (2026-10-18)** — the DDL is guarded against `--check`,
+the ledger is probed read-only with `to_regclass`, a missing ledger exits `3`,
+verification failure exits `1`, psql failure exits `4`. See the TASK 0.2 section.
 
 **P1-4 Migration apply and ledger record are not atomic.** The file runs under
 `--single-transaction`; the ledger `INSERT` runs in a separate `psql` session. A crash in
 between leaves the schema applied and the file unrecorded; the next run re-applies
 `001_initial_schema.sql`, which has bare `CREATE TABLE` and fails immediately. Apply mode
 becomes permanently broken with `--baseline` as the only escape.
+**Status: UNCHANGED by TASK 0.2** — explicitly out of scope; see TASK 0.2 §T9.
 
 **P1-5 100% of the Postgres layer is unexecuted.** 0 of 53 Postgres tests run without
 `TEST_DATABASE_URL` (unset). All RLS policies, all `ON CONFLICT` idempotency, the entire
@@ -480,6 +484,218 @@ neutralising or deleting `backend/.env` is explicitly out of scope.
    deterministic rather than inferred from `.gitignore`.
 5. Consider `chmod 600 backend/.env` — it is currently world-readable
    (mode 644) unlike `.supabase-auth.env` (mode 600).
+
+---
+
+# TASK 0.2 — Safe, Fail-Closed Migration Preflight
+
+**Date:** 2026-10-18
+**Branch:** `feat/label-pipeline-foundation`
+**HEAD at start:** `7a5117a1b2729046d34cffce9a90b12b8f6a2f03`
+**Status:** COMPLETE for the `--check` contract — see T8.
+**Offline only: no database was contacted, no migration was executed.**
+
+## T0. Scope and constraints honoured
+
+Six parallel read-only subagents (Agent 4 re-spawned after returning empty).
+No database connection, no migration run, no deployment script executed, no package
+installed, no credential helper invoked. The token helper was not run. No credential
+or database URL was printed.
+
+Explicitly **not** implemented, per the brief: migration/ledger atomicity, dynamic
+migration discovery, new migrations, privilege grants, RLS changes, URL parsing
+redesign, broad script refactoring. All recorded as outstanding risks in T9.
+
+## T1. Six agent findings and reconciliation
+
+| Agent | Core finding | Disposition |
+|---|---|---|
+| 1 Shell control flow | `--check` executes DDL at :52-53 before the mode branch; `verify_schema && echo` then unconditional `exit 0` swallows failure; `set -e` is also suppressed *inside* `verify_schema` | **Accepted** — all four independently re-verified by the coordinator (§T2) |
+| 2 PostgreSQL query behaviour | The two catalog reads are genuinely read-only; but `information_schema.columns` has no `table_schema` filter and `pg_policies` no `schemaname` filter; a wrong `DATABASE_URL` scheme can echo the password to stderr | Read-only claim **accepted**; filter weakness and stderr-echo **recorded as outstanding** (T9) |
+| 3 Migrations | Hard-coded expectation of 8 is arithmetically correct for the pinned 001–006 state; 005/006 drop four audit policies by design; `001` is the only non-idempotent file; `FILES` is a literal | **Accepted**; `FILES` and `001` recorded as outstanding |
+| 4 Test design | Full offline fake-`psql` harness; CWD-independence via absolute `bash` invocation; `testpaths` excludes `scripts/` | **Accepted and implemented**; collector caveat recorded (T9) |
+| 5 Docs/contracts | Found four doc statements to reclassify; proposed a precise exit-code contract | **Accepted**; `STAGE_18_5 §7.1` added |
+| 6 Red team | **Four blocking defects in the proposal itself**: (a) `MODE="${1:-apply}"` treats `""` as unset and silently APPLIES; (b) moving the ledger `CREATE` below `--baseline` breaks baseline's documented use case; (c) a single non-zero code makes tests vacuous; (d) `scripts/` tests may never be collected | **All three code defects adopted** — they materially changed the implementation |
+
+## T2. Coordinator-verified shell claims
+
+Each was reproduced offline with standalone `bash` probes before any edit.
+
+| Claim | Probe | Result |
+|---|---|---|
+| `&&` + `exit 0` yields a false success | `set -euo pipefail; f(){ return 1; }; f && echo OK; exit 0` | **rc=0** — confirmed |
+| `set -e` is suppressed *inside* a function called from an `&&` list | assignment failing inside the function body | execution **continued** past the failure — confirmed |
+| An empty first argument silently selects apply | `MODE="${1:-apply}"` with `$1=""` | `mode=[apply]` — confirmed |
+| Process substitution discards exit status | `comm -23 <(printf …) <(bash -c "exit 7")` | printed input, **rc=0** — confirmed |
+
+## T3. Root cause
+
+Two independent defects stacked in `--check`:
+
+1. **The ledger `CREATE TABLE` ran unconditionally at :52-53**, before the mode
+   branch at :79, so `--check` performed DDL while its header promised
+   "Changes nothing".
+2. **The verifier ran in an `&&` list followed by an unconditional `exit 0`**,
+   and `set -e` is suppressed for a non-final `&&` member — so every logical
+   verification failure was discarded. Because `set -e` is *also* suppressed inside
+   the function body, a psql failure inside `verify_schema` did not abort either;
+   it produced empty counts, failed the `[ "$owners" = "8" ]` test, and still
+   exited 0.
+
+A third latent defect surfaced during implementation and was fixed: `${1:-apply}`
+treats an **empty string** as unset, so `migrate_staging.sh ""` applied every
+migration. Probed and confirmed before fixing.
+
+## T4. Changes implemented
+
+| File | Change |
+|---|---|
+| `scripts/migrate_staging.sh` | Header rewritten with an explicit exit-code contract and an accurate statement of what is *not* verified. Argument validation hardened. Ledger `CREATE TABLE` guarded against `--check`. `--check` branch rewritten: `to_regclass` probe, single ledger read, explicit exits. |
+| `scripts/test_migrate_staging.py` | **New**, 66 tests, offline fake `psql`. |
+| `STAGE_18_5_DEPLOYMENT.md` | New §7.1 `--check` contract; the historical "verified locally … `--check` (exit 0)" claim relabelled, because that exit code was vacuous. |
+| `IMPLEMENTATION_AUDIT.md` | P1-3 marked resolved; P1-4 marked unchanged; this section. |
+
+**Minimal-change discipline.** `verify_schema()` and `recorded()` were **not**
+modified — they are shared by all three modes. The apply path (:175-187) is
+untouched. `--baseline` keeps the ledger `CREATE`, which is what makes its
+documented "adopt a ledger-less database" use case work; a regression test asserts
+both write modes still emit `CREATE TABLE`.
+
+**Pending-file semantics deliberately preserved.** Pending files remain
+informational and do not change the exit status, so an existing operator expectation
+is not silently redefined. This is stated explicitly in the header and in §7.1.
+
+## T5. Verification — exact commands and results
+
+| Command | Result |
+|---|---|
+| `bash -n scripts/migrate_staging.sh` | **rc=0** |
+| `pytest scripts/test_migrate_staging.py scripts/test_smoke_staging.py` (repo root) | **71 passed** (66 new + 5 pre-existing) |
+| `flake8 app --max-line-length=88` | **rc=0** |
+| `flake8 scripts/test_migrate_staging.py --max-line-length=88` | **rc=0** (longest line 77) — *not enforced by the documented command, checked anyway* |
+| `python -m compileall -q app` | **rc=0** |
+| `git diff --check` | **rc=0** |
+| `pytest app/tests` from `/tmp/opencode` (**controlled CWD**) | **590 passed, 54 skipped, 0 failed** |
+| `pytest app/tests` from `backend/` (uncontrolled) | 589 passed, 54 skipped, **1 failed** — pre-existing, see T8 |
+
+## T6. Evidence that `--check` performs no writes
+
+**By construction.** Every statement reachable from `--check` is enumerated and
+classified. The only statements issued are: `to_regclass` probe, one ledger `SELECT`,
+and the two catalog `count(*)` queries. No `INSERT`/`UPDATE`/`DELETE`/`CREATE`/
+`ALTER`/`DROP`/`COPY`/`TRUNCATE`/`GRANT`/`REVOKE`, and no `psql -f`.
+
+**By regression test.** `assert_check_is_read_only()` inspects the SQL text the fake
+`psql` actually received and classifies every statement, **failing closed**: an
+unparseable statement, an unexpected leading verb, or any mutation keyword anywhere
+returns "mutate". It is backed by 23 mutation cases and 8 read cases.
+
+**By a second, independent signal.** The fake `psql` is stateful: it genuinely
+executes a `CREATE TABLE` against its own model and sets
+`ledger_created_by_script = True`. `test_missing_ledger_fails_without_creating_it`
+asserts this is `False` for the real script; `test_harness_detects_ledger_creation`
+asserts it is `True` for a synthetic regressive script — proving the signal is live,
+not vacuously false.
+
+**By structural assertion.** `test_real_script_has_no_unguarded_ledger_ddl` asserts
+the guard `if [ "$MODE" != "--check" ]; then` exists and that the DDL text appears
+*after* it.
+
+## T7. Non-vacuity proven by running the new tests against the pre-fix script
+
+The test module was run against `git show HEAD:scripts/migrate_staging.sh` in an
+isolated scratch tree. **18 failed, 48 passed**, each failure mapping to a distinct
+real defect:
+
+| Failing test | Real defect in the pre-fix script |
+|---|---|
+| `test_missing_ledger_fails_without_creating_it` | :52-53 `CREATE TABLE` ran under `--check` and created the ledger |
+| `test_check_fails_when_schema_verification_fails[4 params]` | `verify_schema && echo` then `exit 0` — failure swallowed |
+| `test_psql_connection_failure_is_not_success` | psql failure inside the function did not abort; exited 0 |
+| `test_extra_arguments_are_rejected[5 params]` | `${1:-apply}` ignored `$2+`; `apply --check` silently ran apply mode |
+| `test_bad_arguments_are_rejected_before_any_connection[args3]` | an empty argument silently selected apply |
+| `test_check_emits_only_reads` | `CREATE TABLE` classified `mutate` |
+| `test_check_emits_no_ledger_ddl_at_all` | same, from every CWD |
+| `test_check_runs_no_migration_file_from_any_cwd` | same |
+| `test_no_success_message_after_a_missing_ledger` | missing ledger was silently papered over |
+| `test_real_script_does_not_swallow_a_verification_failure` | verifier failure exited 0 |
+| `test_real_script_has_no_unguarded_ledger_ddl` | the guard did not exist |
+
+Additional in-suite negative controls: three regressive scripts (recreates the
+ledger, inserts a ledger row, runs a migration file) must make
+`assert_check_is_read_only` raise; and an `always_exits_zero` control reproduces the
+original `verify && echo OK; exit 0` shape to document that the defect is
+detectable.
+
+## T8. Acceptance criteria, and the pre-existing failure
+
+| Criterion | Status | Evidence |
+|---|---|---|
+| `--check` read-only by construction and by regression test | **MET** | T6 — four independent mechanisms |
+| Verification and query failures return non-zero | **MET** | exit `1` and `4`; `test_check_fails_when_schema_verification_fails[4]`, `test_psql_connection_failure_is_not_success` |
+| Missing-ledger behaviour is explicit | **MET** | exit `3` with a four-line explanation; `to_regclass` probe distinguishes absence from a broken connection |
+| Unknown arguments are rejected | **MET** | exit `2`; 5 extra-arg and 5 bad-arg cases |
+| Tests include effective negative controls | **MET** | T7 — 18 failures against the pre-fix script |
+| Existing apply/baseline paths have no unintended diff | **MET** | `verify_schema`/`recorded`/apply loop untouched; `test_write_modes_still_create_the_ledger` asserts both write modes still emit `CREATE TABLE` |
+| Documentation and audit describe what is and is not verified | **MET** | `STAGE_18_5 §7.1` states the limits explicitly; header states what `--check` does NOT verify |
+| **Security assertion not weakened** | **MET** | the known failure below was left failing and reported separately |
+
+**Pre-existing failure, reported separately and NOT conflated.**
+`app/tests/unit/test_serve.py::test_production_without_auth_config_fails_closed` fails
+only when pytest runs from `backend/`, where the untracked `backend/.env` is readable
+by `Settings.model_config` (`env_file=".env"`, `config.py:122-123`). Same code:
+**590 passed / 0 failed** from a controlled CWD, **589 passed / 1 failed** from
+`backend/`. Unrelated to this task; **not weakened**; requires either explicit
+`Settings` constructor kwargs or a CWD without a `.env`. Fixing it would mean
+neutralising or deleting `backend/.env`, which is out of scope.
+
+## T9. Outstanding risks — UNCHANGED by this task
+
+- **P1-4 migration/ledger atomicity.** The migration file runs under
+  `--single-transaction`; the ledger `INSERT` is a **separate `psql` session**. A
+  crash between them leaves the schema applied and the file unrecorded, and the
+  next run re-applies `001_initial_schema.sql`, whose five bare `CREATE TABLE`
+  statements fail immediately. Apply mode is permanently broken with `--baseline`
+  as the only escape. **This is the highest outstanding migration risk.**
+- **`001_initial_schema.sql` is not idempotent** — five unguarded `CREATE TABLE`
+  statements at :5, :15, :27, :50, :78. This is what makes the window above
+  unrecoverable rather than merely inconvenient.
+- **`FILES` is a hardcoded literal**, not a directory scan. A `007_*.sql` is
+  silently ignored by all three modes until that line is edited (P2-4).
+- **`verify_schema` is a total count with no schema filter.** Neither query
+  filters `table_schema`/`schemaname`, so a same-named table in another schema
+  can inflate the count, and a substitution preserving the total passes. It
+  cannot detect a missing table such as `chemical_entities`, so `--baseline` can
+  bless an incomplete database (P2-5).
+- **`recorded | grep -qx "$file"` under `pipefail`** can yield status 141 when
+  `grep -q` exits early, causing an already-applied file to be re-applied. Latent
+  with a 6-row ledger; out of scope.
+- **P2-2/P2-3 `DATABASE_URL`**: still passed as a `psql` argv (visible in the
+  process table), and the application's `postgresql+asyncpg://` scheme cannot be
+  parsed by `psql`. A malformed URL can echo the password to stderr.
+- **P1-5: 100% of the Postgres layer remains unexecuted** without
+  `TEST_DATABASE_URL`. This task added no live verification.
+- **`.psqlrc` is not disabled.** `-X` is not passed to `psql`; a hostile startup
+  file could in principle override `ON_ERROR_STOP`. Recorded, not changed.
+- **Collector caveat.** `backend/pyproject.toml` sets `testpaths = ["app/tests"]`,
+  so `scripts/` tests are **not** collected by the documented runner and there is
+  no CI. The new tests must be invoked explicitly:
+  `backend/.venv/bin/python -m pytest scripts/ -q` from the repo root.
+- **Documentation contradiction (pre-existing, untouched).**
+  `DEVELOPMENT_GUIDE.md:369/372/455` mandates rollback SQL files that
+  `STAGE_18_5_DEPLOYMENT.md` forbids and that have never existed.
+
+## T10. Operator actions (no credentials in chat)
+
+1. Run the new preflight explicitly before trusting a gate:
+   `backend/.venv/bin/python -m pytest scripts/ -q` from the repo root.
+2. `--check` now exits `3` on a ledger-less database where it previously exited `0`.
+   Any wrapper keying on the old exit `0` must be reviewed.
+3. Treat P1-4 (ledger atomicity) as the top outstanding migration risk; it needs
+   its own task and is not addressed here.
+4. Reconcile the `DEVELOPMENT_GUIDE.md` rollback-file contradiction.
+5. Consider adding `scripts/` to the pytest `testpaths`, or a CI job, so these
+   tests are not silently skipped.
 
 ---
 

@@ -97,19 +97,86 @@ column anywhere). Verified by `git grep` scan (§17) and the
 - default: apply unrecorded files each in its own transaction,
   record on success, stop on first failure, then verify
   (8 owner columns + 8 owner RLS policies expected).
-- `--check`: verify-only, lists recorded vs pending.
+- `--check`: **read-only**. Issues no DDL, no DML, and never creates
+  the migration ledger. It lists recorded vs pending files and runs
+  the schema counts. A missing ledger is reported, not created.
+  Contract in §7.1.
 - `--baseline`: for adopting an existing schema — verifies the
   full expected schema FIRST, records only on success, else
-  refuses.
+  refuses. This is a **write** mode: it creates and populates the
+  ledger.
 - Re-running after success is a verified no-op.
 - Forward-only: no destructive rollback SQL exists by design.
 
+*(Historical, 2026-10-06, against a local database — not
+re-verified since. Note that `--check` returning exit 0 was
+previously vacuous: it exited 0 even on schema drift, because the
+verifier ran in an `&&` list followed by an unconditional `exit 0`.
+See §7.1.)*
 Verified locally: fresh database (exit 0, 8+8 checks pass),
-idempotent re-run (exit 0, all skipped), `--check` (exit 0),
-`--baseline` on a ledger-less complete schema (exit 0).
+idempotent re-run (exit 0, all skipped), `--baseline` on a
+ledger-less complete schema (exit 0).
 Run BEFORE first deploy and on every new migration; never on
 container boot. Uses the existing Supabase database; no second
 database; never the local test database.
+
+### 7.1 `--check` contract (read-only, fail-closed, 2026-10-18)
+
+`--check` is the only mode safe to run without a change window. It
+performs **zero writes**: no DDL, no DML, and no ledger creation. It
+probes `public.schema_migrations` with a read-only catalog query
+(`to_regclass`) and never creates it.
+
+**A missing ledger is a failure, not a setup step.** `--check` exits
+`3` and stops. Adopting a database that already carries the schema is
+`--baseline`'s job (§7), and `--baseline` is a write mode.
+
+| Exit | Meaning |
+|---|---|
+| `0` | Ledger present and readable, schema counts 8/8. Pending files may still be listed — pending is **informational and does not change the exit status**, preserving the pre-existing behaviour that a listing is not a failure. |
+| `1` | Schema verification failed (owner columns and/or owner RLS policies are not 8/8). |
+| `2` | Bad usage or environment: unknown flag, extra argument, empty argument, `DATABASE_URL` unset, or `psql` absent. **Nothing was contacted.** |
+| `3` | `public.schema_migrations` does not exist. |
+| `4` | psql or query failure — connection, authentication, permission, or SQL error. No verdict was reached. |
+
+Code `2` is reserved for usage/environment problems precisely so that
+a harness whose `psql` cannot be resolved can never be mistaken for a
+"ledger missing" result. Pending files stay non-fatal so that existing
+operator expectations are not silently redefined.
+
+**What a passing `--check` does and does not mean.** It confirms the
+ledger is readable and that the two counts are 8/8. It does **not**
+confirm that the live schema matches `backend/migrations/`: `FILES`
+is a hardcoded list, so a new `007_*.sql` is invisible to every mode;
+`verify_schema` is a *total count* with no `table_schema` filter, so it
+cannot tell which tables the 8 columns and 8 policies are on; and it
+says nothing about `chemical_entities`, seed data, indexes,
+constraints, triggers, grants, or any table outside the eight named
+ones. **Do not cite `--check` as schema attestation.**
+
+**What the offline tests prove.** `scripts/test_migrate_staging.py`
+substitutes a fake `psql` on `PATH` and asserts on the SQL the script
+actually emits. It proves **control flow and emitted SQL only** — that
+`--check` issues no DDL or DML, never runs a migration file, never
+creates the ledger, takes the correct branch, and returns each
+documented exit code. It proves **nothing** about a live database: not
+that the deployed schema matches, not that RLS behaves, not that
+apply or `--baseline` work, and **not** that the migration system is
+production-safe. No witnessed database run was performed for this
+change; no migration was executed and no database was contacted.
+
+**Unchanged by this change.** Migration/ledger atomicity (the
+migration file runs under `--single-transaction` while the ledger
+`INSERT` is a separate `psql` session, so a crash between them leaves
+the schema applied and the file unrecorded); the non-idempotent
+`001_initial_schema.sql` (five bare `CREATE TABLE`); the hardcoded
+`FILES` list; `verify_schema`'s count-only and unfiltered nature; and
+`DATABASE_URL` exposure via `psql` argv plus the
+`postgresql+asyncpg://`-vs-psql scheme conflict. Forward-only policy
+is unchanged: no rollback SQL exists by design, and no
+`*_rollback.sql` file is present — note that `DEVELOPMENT_GUIDE.md`
+still instructs contributors to write rollback files, which remains an
+open documentation contradiction.
 
 ## 8. Health/readiness
 
