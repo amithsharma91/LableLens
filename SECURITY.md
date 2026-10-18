@@ -219,6 +219,146 @@ Supabase RLS policies are the last line of defense for data isolation. They must
 - Prefer `auth.uid()` in policies over application-level user ID parameters, which could be spoofed if the session verification layer has a bug.
 - Test RLS policies explicitly: verify that a query made with User A's credentials cannot return or modify rows owned by User B.
 
+### 5.1 Implemented Boundary (verified 2026-10-18, Task 0.1)
+
+This subsection records what the code actually does today and corrects the
+Policy Summary table above. That table and the opening paragraph of this
+section describe a **target state**; the statements below are the
+**implemented state**, each traceable to a file and line. Read §5.1 first
+whenever §5 is used to justify a decision.
+
+**What the implementation actually does**
+
+- **The application holds one service-role connection per request.**
+  `app/main.py:146` opens a single connection inside one transaction and
+  binds every repository to it (`app/main.py:149-155`). There is no second
+  connection, no connection swap, and no role switch anywhere in the
+  request lifecycle.
+- **That connection bypasses RLS.** The engine is created at
+  `app/serve.py:76`; the only statement executed at connect time is
+  `SELECT 1` (`app/serve.py:128`). The application never issues
+  `SET ROLE`, `SET LOCAL`, or `set_config`: a search for `current_setting`,
+  `set_config`, `SET ROLE`, `SET LOCAL`, and `current_subject` across
+  `app/` **excluding `app/tests/` returns zero matches**. The only Python
+  that sets a role or a GUC is in the integration tests
+  (`app/tests/integration/test_postgres.py:260`,
+  `app/tests/integration/test_ocr_postgres.py:416`), which open their own
+  connection specifically to exercise the database-side policy.
+- **`role=` is a Python-side convention, not a database control.**
+  `_require_write` and `_require_read` (`app/repositories/postgres.py:336-343`)
+  compare a plain string against module constants. No SQL is generated
+  from that value and no `SET ROLE` follows. Passing `role="authenticated"`
+  changes nothing at the database; Postgres still evaluates policies
+  against the connection's real role.
+- **`app.current_subject` is not set by this application.** The owner
+  policies (`005_ocr_ownership.sql:45-63`, `006_analysis_ownership.sql:65-99`)
+  read `current_setting('app.current_subject', true)`, and nothing in the
+  serving path ever sets it. Those policies are therefore **not actively
+  enforced through this connection**; they hold only for a direct
+  `authenticated`-role database client that sets the setting itself.
+- **Application-layer owner checks are the ACTIVE boundary** for
+  user-owned rows. `require_owner_match` (`app/services/errors.py:33-41`)
+  compares the stored `owner_subject` against the verified principal
+  after the row is read, and foreign rows answer `404`. Routes that pass
+  `owner=principal.subject` include `api/v1/ocr.py:98,110,140,177,220`,
+  `api/v1/observations.py:95,141,182,251`, `api/v1/reviews.py:87,120`, and
+  `api/v1/verification.py:104,187`.
+
+**Corrections to claims made above**
+
+- The opening sentence of §5 ("RLS policies are the last line of defense
+  for data isolation") does **not** describe this application. RLS is a
+  defense-in-depth control against a **direct `authenticated` database
+  client**; it is not a live boundary on the API path, because every API
+  query runs on the bypass connection. The accurate ordering is the
+  reverse: application-layer owner checks are the boundary, and RLS is the
+  backstop for the non-API path.
+- Likewise, the session-model line "(service role for privileged paths;
+  RLS for user-scoped paths)" and the trust-boundary line "Service role /
+  RLS-aware queries" describe no code path that exists. All data access is
+  service-role.
+- No policy in this repository uses `auth.uid()`; the owner policies use
+  `current_setting('app.current_subject', true)`. The Implementation Rules
+  above remain correct as *requirements for the direct-database path* and
+  are not retracted: RLS should stay enabled, `authenticated` writes
+  should stay denied, and the integration tests that assert cross-subject
+  denial should keep passing.
+- The Policy Summary table lists tables that do not exist:
+  `product_scans`, `user_corrections`, `comparisons`,
+  `verified_chemical_entities`, `approved_source_metadata`,
+  `public_role_taxonomy`, `public_claims`. **The canonical entity table is
+  `chemical_entities`** (`001_initial_schema.sql:50`); the alias table is
+  `ingredient_aliases` (`001_initial_schema.sql:78`). The implemented
+  matrix follows and supersedes that table.
+
+**Implemented matrix (supersedes the Policy Summary table above)**
+
+| Table | RLS | `authenticated` SELECT (direct DB) | `authenticated` write (direct DB) | Through the API |
+|---|---|---|---|---|
+| `ocr_runs`, `ocr_corrections` | yes | owner only | denied | service role; owner checked in app layer |
+| `ingredient_observations` | yes | owner or legacy NULL | denied | service role; owner checked in app layer |
+| `ingredient_normalizations`, `ingredient_candidates`, `entity_matches`, `verification_decisions`, `reviews` | yes | owner or legacy NULL | denied | service role; owner checked in app layer |
+| `claims`, `claim_sources`, `verification_events`, `review_events` | yes | **all authenticated** (`USING (true)`) | denied | service role; see open decision below |
+| `domains`, `roles`, `sources`, `chemical_entities`, `ingredient_aliases` | **no** | **not established by any migration** | not established | service role; import-only by convention |
+
+**Open gap: `chemical_entities` and `ingredient_aliases` have no
+database-level protection.**
+
+- Neither table has `ENABLE ROW LEVEL SECURITY`, a policy, **or any
+  `GRANT`/`REVOKE` statement** anywhere in `migrations/*.sql`. Migrations
+  `001` and `002` contain no privilege statement of any kind. The Stage-18
+  note that these tables are protected "per pre-existing grants" is
+  therefore **not supported by the repository**: those grants are neither
+  created here nor reproducible from here. The same is true of `domains`,
+  `roles`, and `sources`.
+- What protects them today is convention and layering: the canonical
+  chemistry tables are written only by the administrative CLI
+  `app/cli/import_canonical_entities.py`, which requires service-role
+  credentials plus an explicit `ENTITY_IMPORT_CONFIRM=service-role`
+  interlock that the API process never holds. No route creates or mutates a
+  canonical entity; a decision naming an unregistered entity is rejected
+  `422 ENTITY_NOT_FOUND` before any write.
+- **This requires a separately planned database-permissions remediation
+  and is not addressed by this document.** The work is to decide the
+  intended direct-database posture for the five canonical tables
+  (`domains`, `roles`, `sources`, `chemical_entities`,
+  `ingredient_aliases`), write it as an explicit idempotent
+  `REVOKE`/`GRANT` block in a new migration, and assert it in an
+  integration test. Until such a migration exists, the live grant state of
+  those tables is **unverified and environment-dependent**, and this
+  document does not claim otherwise.
+
+**Open decision: is `GET /api/v1/claims/{claim_id}` owner-scoped?**
+
+- **Schema (settled).** `claims` is classified
+  `shared by content (never owned, never forked)`
+  (`006_analysis_ownership.sql:17`). It has no `owner_subject` column at
+  all (`003_verification_review.sql:118-141`), and its direct-database
+  SELECT policy is deliberately global:
+  `CREATE POLICY audit_read_claims ON claims FOR SELECT TO authenticated
+  USING (true)` (`003_verification_review.sql:334`).
+- **API (NOT settled).** The route `api/v1/verification.py:149-163` calls
+  `service.get_claim(claim_id)` at line 157 **without** passing `owner=`.
+  The service signature (`observation_service.py:433-442`) accepts only
+  `role=`, the repository query (`postgres.py:515-524`) filters on `id`
+  alone, and `require_owner_match` is never reached on this path. A
+  sibling route 20 lines later does forward `owner=principal.subject`
+  (`verification.py:187`). So the API currently offers **no owner filter of
+  its own**, and — because the application runs on the bypass connection —
+  **no RLS filter either**.
+- **This is an OPEN DECISION requiring an owner ruling and a regression
+  test. No ruling is made here, and no route behaviour has changed.** Two
+  readings are defensible: claims are shared chemistry truth and global
+  read is correct by design; or claims derived from a user's private label
+  content should be owner-scoped, matching the observation chain. The
+  answer depends on product intent about claim provenance, not on the code.
+- Required follow-up either way: record the ruling, and add a
+  cross-subject regression test to `app/tests/api/` alongside
+  `test_api_ownership.py::test_verification_and_candidates_isolate_users`
+  so the behaviour is pinned deliberately rather than by omission. Today
+  `test_api_verification.py:108-120` exercises the claim route with a
+  single principal only, so neither reading is protected by a test.
+
 ---
 
 ## 6. Secrets Management
@@ -493,11 +633,23 @@ NULL-owner rows keep prior readability and match no subject.
   (construction tests in `test_serve.py`). There is no dev-mode
   fallback on the staging entrypoint.
 - Secrets travel as Secret Manager references (`--update-secrets`);
-  none are committed, baked into the image (`.dockerignore`
-  excludes `.env`; no secret `ENV`), printed (deploy script
-  avoids `set -x`; smoke output is asserted secret-free), or
-  served (OpenAPI schema asserted secret-free; `/docs` stays
-  enabled on staging because schemas carry no secrets).
+  none are committed, baked into the image, printed (deploy script
+  avoids `set -x`; smoke output is asserted secret-free), or served
+  (OpenAPI schema asserted secret-free; `/docs` stays enabled on
+  staging because schemas carry no secrets). Two independent controls
+  keep them out of the image: the `.dockerignore` credential rules
+  (`/backend/.env`, `/backend/.supabase-auth.env`,
+  `/backend/get_supabase_token.sh`), and the explicit `COPY` allow-list
+  in `backend/Dockerfile:32-35`, which copies only `pyproject.toml`,
+  `app/`, `migrations/`, and `snapshots/`. Both are asserted by
+  `app/tests/unit/test_secret_paths_are_ignored.py`.
+  *(Corrected 2026-10-18, Task 0.1: the previous text claimed the
+  `.dockerignore` line `.env` excluded the local env file. It did not.
+  Docker matches ignore patterns against the path relative to the build
+  context root, which is the repository root, so a bare `.env` only
+  ever matched a repository-root file and silently excluded nothing
+  under `backend/`. Containment was in fact carried by the `Dockerfile`
+  `COPY` allow-list alone.)*
 - Cloud Run invocation is public so the app's own JWT boundary is
   externally testable; every data route still requires a valid
   bearer token. CORS allow-list ships empty (no browser origin

@@ -13,3 +13,16 @@ frontend/
 *.md
 backend/app/tests/
 .DS_Store
+
+# Credential containment (Task 0.1).
+# Docker matches these patterns against the path RELATIVE TO THE BUILD
+# CONTEXT ROOT, which is the repository root (see backend/Dockerfile:7).
+# A bare pattern like `.env` or `*.sh` therefore only ever matches at the
+# repository root and silently fails to exclude anything under backend/,
+# which is why those forms are NOT used here.
+# Anchored to the exact paths so the tracked ops scripts under scripts/
+# are never excluded.
+/backend/.env
+/backend/.env.local
+/backend/.supabase-auth.env
+/backend/get_supabase_token.sh

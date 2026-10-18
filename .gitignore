@@ -30,3 +30,10 @@ build/
 *.db
 *.sqlite3
 uploads/
+.supabase-auth.env
+
+# Local credential helpers — never commit (Task 0.1).
+# Anchored to the exact path: a broad `*.sh` would also hide legitimate
+# future tooling in scripts/, and these two files hold live Supabase
+# credentials on developer machines.
+/backend/get_supabase_token.sh
