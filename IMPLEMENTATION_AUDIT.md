@@ -145,7 +145,11 @@ verification failure exits `1`, psql failure exits `4`. See the TASK 0.2 section
 between leaves the schema applied and the file unrecorded; the next run re-applies
 `001_initial_schema.sql`, which has bare `CREATE TABLE` and fails immediately. Apply mode
 becomes permanently broken with `--baseline` as the only escape.
-**Status: UNCHANGED by TASK 0.2** — explicitly out of scope; see TASK 0.2 §T9.
+**Status: RESOLVED by TASK 0.3 (2026-10-18)** — the migration file and its ledger `INSERT` now
+share ONE `psql` invocation under `--single-transaction`, with the recorded-state check and
+the advisory lock inside that same transaction. Verified against a disposable local
+PostgreSQL 18.6, not staging. See the TASK 0.3 section. Residual: `001` is still not
+idempotent on its own, and `psql` is not version-gated.
 
 **P1-5 100% of the Postgres layer is unexecuted.** 0 of 53 Postgres tests run without
 `TEST_DATABASE_URL` (unset). All RLS policies, all `ON CONFLICT` idempotency, the entire
@@ -696,6 +700,176 @@ neutralising or deleting `backend/.env`, which is out of scope.
 4. Reconcile the `DEVELOPMENT_GUIDE.md` rollback-file contradiction.
 5. Consider adding `scripts/` to the pytest `testpaths`, or a CI job, so these
    tests are not silently skipped.
+
+---
+
+# TASK 0.3 — Atomic Migration Application and Ledger Recording
+
+## T0. Scope and constraints honoured
+
+Six parallel read-only subagents were dispatched (transaction architecture; concurrency and
+idempotency; mode compatibility; offline test design; documentation; independent red team).
+The first red-team dispatch returned no text and was re-run rather than counted. No agent
+edited a file; the coordinator alone integrated findings. No reset/clean/stash/checkout/
+force-push/merge. `docs/` left untracked and never staged. No credential was printed. No
+staging or production database was contacted. `deploy_staging.sh` and
+`get_supabase_token.sh` were never executed. Migrations `001`–`006` were not edited. The
+Task 0.2 exit-code contract was not changed. No `git add -A`.
+
+## T1. Six agent findings and reconciliation
+
+| Agent | Key finding | Disposition |
+|---|---|---|
+| 1 — architecture | 001–006 contain **no** top-level transaction control and no non-transactional statement; all are `-1`-safe. `\if`/`\gset` are client-side and require psql 10+. | Accepted. Verified independently. |
+| 2 — concurrency | No lock of any kind; the shell check-then-apply window is racy. `pg_advisory_xact_lock` is the right primitive. | Accepted. |
+| 3 — compatibility | `--check` §7.1 and the exit-code table are frozen; ledger DDL must stay above the baseline `INSERT`s; `verify_schema`/`recorded` are shared. | Accepted. `verify_schema` and `recorded` untouched except appending `-X`. |
+| 4 — test design | The existing fake **never opens the `-f` file**, so any `-f`-based design is invisible to it; `FAKE_RECORDED` defaults to all six files, so the apply path is a no-op by default. | Accepted; drove the new fake and `recorded=[]` in every apply test. |
+| 5 — docs | Forward-only policy is untouched; offline proof must be separated from live verification. | Accepted. |
+| 6 — red team | `\if` **fails open**; `-X` is required and must follow the DSN; the existing tests have **zero** apply-atomicity coverage; `\i`/`\cd` cannot take quoted paths; `rm -rf` on a derived mktemp path is destructive; `--baseline` and the ledger DDL are outside any lock. | Accepted; each shaped the implementation. |
+
+Three red-team claims were **refuted by measurement** and did not shape the code:
+
+- `psql 18.6` does **not** print `\gset` output, so no `-t -A` was needed for that reason.
+- `psql 18.6` **ignores** `\quit 1` (it warns and exits 0), and `\echo ... >&2` prints the
+  literal `>&2` to stdout. The red team's suggested fail-closed guard would not have worked.
+- Neither `\i` nor `\cd` strips quotes **or** tolerates spaces. The generated script therefore
+  contains no path at all; psql runs with `$MIGRATIONS` as its working directory.
+
+## T2. Design
+
+Per pending file, one `psql -X -1 -q -t -A -v ON_ERROR_STOP=1 -f <step>` submission whose
+single transaction contains, in order: `SET TRANSACTION ISOLATION LEVEL READ COMMITTED`;
+`SET LOCAL lock_timeout` + `pg_advisory_xact_lock(7081702300000000001)` + reset; an in-
+transaction re-read of the ledger; `\i` the migration only if still pending; the ledger
+`INSERT`. `--baseline` moved under the same lock in one transaction. The ledger `CREATE
+TABLE IF NOT EXISTS` now takes the lock in the same statement, because that DDL is not
+itself race-free. Filenames are validated against `NNN_word.sql` before being interpolated
+into SQL or a `\i` line.
+
+**Fails closed.** The probe sets two complementary variables; an unusable value falls into a
+final branch containing `SELECT 1/0`, so `ON_ERROR_STOP` aborts and the transaction rolls
+back. Measured on PostgreSQL 18.6: `\if` with an unset variable prints an error, takes the
+false branch, and **exits 0** — a silent skip with a successful `COMMIT`.
+
+## T3. Changes implemented
+
+| Path | Change |
+|---|---|
+| `scripts/migrate_staging.sh` | Apply loop rewritten; `--baseline` one transaction under the lock; lock key constant; `write_step_script`; `mktemp -d` + explicit `trap` cleanup + "outside the repository" guard; filename validation; post-failure ledger reconciliation; `-X` added to **all 8** `psql` calls, always after `"$DATABASE_URL"`; header rewritten. |
+| `scripts/test_migrate_staging_atomic.py` | New. 27 tests. Fake psql models `BEGIN`/`COMMIT`/`ROLLBACK`, separates migration from ledger writes, fails at either stage, models a held lock and an ambiguous commit, and records `-f` file contents. Includes negative controls. |
+| `STAGE_18_5_DEPLOYMENT.md` | §7 apply bullet corrected; new §7.2 atomicity contract. |
+| `IMPLEMENTATION_AUDIT.md` | P1-4 → RESOLVED; this section. |
+| `CHANGELOG.md` | Entry under `[Unreleased]`. |
+
+`verify_schema()` and `recorded()` are unchanged apart from `-X`. The ledger DDL was not
+moved (the `--check` guard still precedes it, which
+`test_real_script_has_no_unguarded_ledger_ddl` pins).
+
+## T4. Verification — exact commands and results
+
+| Command | Result |
+|---|---|
+| `backend/.venv/bin/python -m pytest scripts/ -q` (repo root) | **98 passed** (66 pre-existing + 5 smoke + 27 new), twice, stable |
+| `backend/.venv/bin/python -m pytest backend/app/tests -q` (from `/tmp/opencode`) | **590 passed, 54 skipped, 0 failed** |
+| `backend/.venv/bin/python -m flake8 app --max-line-length=88` | rc=0 |
+| `backend/.venv/bin/python -m flake8 scripts/ --max-line-length=88` | rc=0 |
+| `backend/.venv/bin/python -m compileall -q app` | rc=0 |
+| `bash -n scripts/migrate_staging.sh` | rc=0 |
+| `git diff --check` | rc=0 |
+
+**Against a disposable local PostgreSQL 18.6** (unix socket, no password, databases
+`t03_*`, created for this task and dropped afterwards; **no staging or production database
+was contacted**):
+
+| Scenario | Observed |
+|---|---|
+| Fresh DB, apply | 6/6 applied, ledger 6 rows, 18 tables, `verify_schema` 8/8, exit 0 |
+| Re-run apply | 6 × `skip … (already recorded)`, exit 0 |
+| `--check` applied DB | exit 0 |
+| `--check` ledger-less DB | exit 3, ledger **not** created |
+| `--baseline` on a schema-carrying ledger-less DB | exit 0, ledger 6 rows, `--check` then exit 0 |
+| `--baseline` on an incomplete schema | exit 1, **zero** ledger rows |
+| `001` fails midway | `domains`, `roles`, `sources`, `chemical_entities` all **ABSENT**; ledger 0; exit 1 |
+| Retry after fixing | 6/6 applied, ledger 6, exit 0 |
+| **A/B — ledger `INSERT` for 003 fails** | **new:** policy, trigger, function all ABSENT, not recorded, exit 1. **old (HEAD):** all three PRESENT, not recorded — applied-but-unrecorded |
+| 6 concurrent runners, one empty DB | all exit 0, exactly 6 ledger rows, 0 duplicates |
+
+## T5. Non-vacuity
+
+The new module was copied into a scratch tree whose `migrate_staging.sh` is byte-identical
+to `HEAD` (pre-Task-0.3), and run against it: **13 of 27 failed.** The 14 that still pass are
+the `--check` exit-code tests, the hygiene tests, and the negative controls (which exercise
+synthetic scripts, not the real one). The pre-existing 66-test suite passes against **both**
+scripts, which is the point: it never covered apply atomicity, so only the new tests can see
+this difference.
+
+In-suite controls require `assert_single_transaction_per_migration` to **reject** a
+replica of the old split design, a lock taken after the probe, a ledger `INSERT` outside the
+conditional block, and a shell-side recorded check — plus two direct vacuity checks on the
+assertion helper itself.
+
+## T6. Acceptance criteria
+
+Met, with the limits below.
+
+- One transaction per migration, check-inside-lock: **met and demonstrated on real PostgreSQL.**
+- SQL or ledger failure rolls the migration back: **met and demonstrated.**
+- Concurrent invocations cannot race a shell-only check-then-apply: **met** — the shell no
+  longer makes the decision at all.
+- Retry handles recorded files and ambiguous commits: **retry-after-record is demonstrated
+  on real PostgreSQL; the ambiguous-commit path is exercised offline only** (a genuine lost
+  `COMMIT` reply is not reproducible on demand).
+- `--check` read-only and fail-closed: **unchanged**, 66 pre-existing tests still pass.
+- `--baseline` functional by design; migrations unedited: **met**, re-verified end-to-end.
+- Negative controls catch a split-transaction regression: **met**.
+- Documentation separates offline from live evidence: **met**.
+- No live database, deployment or credential helper: **met.**
+- `docs/` and credential files preserved: **met.**
+
+## T7. Pre-existing failure — reported separately, NOT conflated
+
+`app/tests/unit/test_serve.py::test_production_without_auth_config_fails_closed` fails only
+when pytest runs with `backend/` as the working directory: `SettingsConfigDict(env_file=
+".env")` (`backend/app/config.py:122-123`) resolves the untracked local `backend/.env`.
+Its assertion was not weakened. From a controlled working directory the backend suite is
+**590 passed / 54 skipped / 0 failed.**
+
+## T8. Outstanding — recorded, NOT fixed
+
+- `FILES` is hardcoded; a `007_*.sql` is invisible to every mode.
+- `verify_schema` is a total count with no `table_schema` filter and covers only 8 columns
+  and 8 policies.
+- `001_initial_schema.sql` is still not idempotent on its own. Atomicity removes the
+  *mechanism* that stranded a partially applied database; it does not make `001` re-runnable.
+- `DATABASE_URL` is still passed as a `psql` argument, and the
+  `postgresql+asyncpg://`-vs-psql scheme conflict is unchanged.
+- No CI, no dependency lock, and `scripts/` is still outside
+  `backend/pyproject.toml` `testpaths`.
+- **`psql` is not version-gated at startup.** The script now requires psql 10+ because of
+  `\if`/`\gset`; an older client would misparse rather than fail cleanly. A
+  `psql -tAc 'SHOW server_version_num'` gate was considered and rejected: it would add a
+  psql call to the read-only `--check` path, changing that mode's behaviour.
+- **No migration is guarded against a future top-level `BEGIN`/`COMMIT`, a psql
+  meta-command, or `\set ON_ERROR_STOP off`.** Any of those silently voids
+  `--single-transaction` with no error. Migrations `001`–`006` are clean today
+  (verified by scan), but nothing enforces it.
+- A killed runner's backend keeps its advisory lock until its current statement finishes
+  (PostgreSQL does not poll the socket while executing). `lock_timeout` bounds the *waiter*;
+  it does not shorten the *holder*.
+- `DEVELOPMENT_GUIDE.md:369/372/455` still mandates rollback SQL that
+  `STAGE_18_5_DEPLOYMENT.md` forbids. Forward-only policy is preserved; the contradiction
+  is open.
+
+## T9. Operator actions (no credentials in chat)
+
+1. Run `backend/.venv/bin/python -m pytest scripts/ -q` from the repo root; these tests are
+   not collected by default.
+2. `--check` still exits `3` on a ledger-less database (TASK 0.2). Any wrapper keying on the
+   old exit `0` must still be reviewed.
+3. After an interrupted apply, **re-run the script**. Do not insert a ledger row by hand;
+   use `--baseline` to adopt a schema this script did not produce.
+4. Stage 18.5 remains **PARTIAL**: no staging deploy has been performed and the exposed
+   Supabase credential has not been rotated (operator action — treat it as compromised).
 
 ---
 

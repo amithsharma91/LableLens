@@ -7,7 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- `scripts/migrate_staging.sh` — apply mode is now **atomic per migration**: the migration
+  SQL and its `public.schema_migrations` row are submitted as one psql script under
+  `--single-transaction` with `ON_ERROR_STOP=1`, so a file is either fully applied and
+  recorded or neither. Previously the two were separate psql sessions, so a crash or a
+  failing ledger `INSERT` between them left the schema applied and the file unrecorded —
+  which, on a database that already carried the schema, made the next run re-apply the
+  non-idempotent `001_initial_schema.sql` and fail.
+  - The recorded-state check moved **inside** the transaction, after a transaction-scoped
+    `pg_advisory_xact_lock` with a fixed key, so two concurrent runners cannot both decide
+    a file is pending. The shell no longer makes the apply/skip decision.
+  - The probe **fails closed**: psql's `\if` treats an unparseable value as false and only
+    warns, which would silently skip a migration and still commit. A second complementary
+    variable routes any unusable value into a branch that raises a real SQL error.
+  - `--baseline` moved under the same lock into one transaction; previously six separate
+    sessions could leave a ledger claiming files 001–003 were applied when only
+    `verify_schema` had run.
+  - On failure the script re-reads the ledger and reports whether the migration committed
+    or rolled back, rather than leaving the operator to infer it from an exit code. The
+    exit status stays non-zero; a retry is always safe.
+  - `psql -X (--no-psqlrc)` is now passed on **every** invocation: a `COMMIT` in `~/.psqlrc`
+    would silently void `--single-transaction`, and a stray write would make `--check` write.
+  - `psql` 10+ is now required (the generated script uses `\if`/`\gset`).
+- `STAGE_18_5_DEPLOYMENT.md` — new §7.2 documents the atomicity contract, the concurrency
+  guarantee and its limits, and what was verified where. §7's apply description corrected.
+- `IMPLEMENTATION_AUDIT.md` — P1-4 (migration/ledger atomicity) marked RESOLVED; TASK 0.3
+  section added.
+
 ### Added
+- `scripts/test_migrate_staging_atomic.py` — 27 offline tests for atomic apply. The fake
+  `psql` models `BEGIN`/`COMMIT`/`ROLLBACK` explicitly, separates running a migration from
+  writing the ledger, can fail at either stage, models a held advisory lock and an ambiguous
+  commit, and records the full text of every `-f` file. Covers per-migration transaction
+  boundaries, check-inside-lock ordering, rollback on SQL and on ledger failure, retry after
+  failure and after an ambiguous commit, lock contention, the fixed lock key, `--check`
+  exit codes, `--baseline` adoption, temp-file location and cleanup, and filename
+  validation. Negative controls require the assertions to **reject** a replica of the old
+  split design, a lock taken after the probe, a ledger `INSERT` outside the conditional
+  block, and a shell-side recorded check.
+- The atomicity invariant was additionally confirmed against a **disposable local
+  PostgreSQL 18.6 instance** (not staging): a failing ledger `INSERT` rolled the migration
+  back, whereas the previous script left the policy, trigger and function committed with no
+  ledger row; and six concurrent runners produced exactly six ledger rows with no
+  duplicates. No staging or production database was contacted.
 - `IMPLEMENTATION_AUDIT.md` — full repository reality audit. Key finding: the
   Vite/React prototype described in the master brief is not present in this
   checkout (`frontend/` holds only empty dirs; no parser/services/UI code exists).

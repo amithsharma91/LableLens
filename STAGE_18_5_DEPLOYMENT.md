@@ -94,9 +94,9 @@ column anywhere). Verified by `git grep` scan (§17) and the
 `DATABASE_URL` (psql, `ON_ERROR_STOP`, deterministic
 001→006 order, `schema_migrations` ledger):
 
-- default: apply unrecorded files each in its own transaction,
-  record on success, stop on first failure, then verify
-  (8 owner columns + 8 owner RLS policies expected).
+- default: apply unrecorded files, each **atomically** — the migration
+  and its ledger `INSERT` share ONE transaction (§7.2) — stop on first
+  failure, then verify (8 owner columns + 8 owner RLS policies expected).
 - `--check`: **read-only**. Issues no DDL, no DML, and never creates
   the migration ledger. It lists recorded vs pending files and runs
   the schema counts. A missing ledger is reported, not created.
@@ -168,7 +168,8 @@ change; no migration was executed and no database was contacted.
 **Unchanged by this change.** Migration/ledger atomicity (the
 migration file runs under `--single-transaction` while the ledger
 `INSERT` is a separate `psql` session, so a crash between them leaves
-the schema applied and the file unrecorded); the non-idempotent
+the schema applied and the file unrecorded) — *this was the defect the
+next section removes*; the non-idempotent
 `001_initial_schema.sql` (five bare `CREATE TABLE`); the hardcoded
 `FILES` list; `verify_schema`'s count-only and unfiltered nature; and
 `DATABASE_URL` exposure via `psql` argv plus the
@@ -177,6 +178,105 @@ is unchanged: no rollback SQL exists by design, and no
 `*_rollback.sql` file is present — note that `DEVELOPMENT_GUIDE.md`
 still instructs contributors to write rollback files, which remains an
 open documentation contradiction.
+
+### 7.2 `apply` atomicity contract (2026-10-18)
+
+**Either a migration's changes and its ledger row both commit, or
+neither does.** Previously the migration ran under
+`--single-transaction` and the ledger `INSERT` was a *second* `psql`
+session: a crash, connection loss, or `INSERT` failure between them
+left the schema applied and the file unrecorded. On a database that
+already carries the schema, the next run then re-applied
+`001_initial_schema.sql` — which is not idempotent — and failed.
+
+For each pending file the script now generates a psql script in a
+private `mktemp -d` directory (mode 0700, outside the repository,
+removed by a `trap`) and submits it with:
+
+```
+psql "$DATABASE_URL" -X -1 -q -t -A -v ON_ERROR_STOP=1 -f <step>
+```
+
+Inside that one transaction, in order:
+
+1. `SET TRANSACTION ISOLATION LEVEL READ COMMITTED`
+2. `SET LOCAL lock_timeout`; `SELECT pg_advisory_xact_lock(<fixed key>)`; reset
+3. re-read the ledger **for this file**, inside the transaction
+4. `\i` the migration file, only if still pending
+5. `INSERT INTO public.schema_migrations (filename) VALUES (<file>)`
+
+**Why this closes the window.** `-1`/`--single-transaction` wraps the
+whole submitted file, `\i` included, so the migration and the ledger
+`INSERT` are one transaction; `ON_ERROR_STOP=1` is mandatory, because
+without it psql would `COMMIT` a partially applied migration. The
+recorded-state check is deliberately **not** done in the shell: a
+shell-side check is a separate session taken before the lock and
+cannot see a concurrent runner's commit. Here it runs *after* the lock
+and *inside* the same transaction that does the work it gates.
+
+The advisory lock is transaction-scoped, so PostgreSQL releases it on
+`COMMIT` and on `ROLLBACK`. Its key is a fixed literal, never derived
+per run — a per-run key would take two different locks and make the
+serialization a no-op.
+
+**Fails closed.** `\if` treats an unparseable value as false and only
+*warns*, which would silently skip a migration and still `COMMIT`.
+The probe therefore sets two complementary variables; anything other
+than a clean `yes`/`no` falls into a final branch that raises a real
+SQL error, so `ON_ERROR_STOP` aborts and the transaction rolls back.
+
+**If the commit reply is lost.** If the connection drops during
+`COMMIT`, psql exits non-zero whether or not the server committed, so
+the exit code cannot decide the question. The script re-reads the
+ledger in a fresh session and reports which of the two happened. The
+exit status stays non-zero either way — failing closed. **A retry is
+always safe**: it re-reads the ledger under the lock and skips a file
+that really did commit. Do not manually insert a ledger row to "fix" a
+failure; that is what `--baseline` is for, and it is the only supported
+way to adopt a schema that was not produced by this script.
+
+**Concurrency.** Two runners cannot both decide a file is pending.
+Verified on a disposable local PostgreSQL 18.6: six concurrent runners
+against one empty database produced exactly six ledger rows and no
+duplicates. **Not** verified against staging.
+
+`--baseline` was moved under the same lock and into one transaction,
+for the same reason: six separate sessions previously left a ledger
+claiming files 001–003 were applied when only `verify_schema` had run.
+
+**`psql -X` on every call.** A `COMMIT` in `~/.psqlrc` would silently
+void `--single-transaction`, and a stray write there would make
+`--check` write. The generated script uses `\if` and `\gset`, so it
+needs **psql 10 (2017) or newer**.
+
+**What was verified, and where.** The invariant was confirmed against a
+*disposable local PostgreSQL 18.6 instance*, never staging: a failing
+migration rolled back every table created earlier in the same file; a
+failing ledger `INSERT` rolled the migration back and left no row (the
+previous script, given the identical failure, left the policy, trigger
+and function committed with no ledger row); six concurrent runners
+serialized correctly; and the full 001→006 apply, a re-run, `--check`
+and `--baseline` all behaved as documented. **No staging or production
+database was contacted, and no migration was executed against one.**
+
+**What the offline tests prove.** `scripts/test_migrate_staging_atomic.py`
+adds a fake `psql` that models `BEGIN`/`COMMIT`/`ROLLBACK`, separates
+running a migration from writing the ledger, can fail at either stage,
+and records the full text of every `-f` file. It proves **control flow,
+transaction options and emitted SQL only**. It cannot prove that
+PostgreSQL rolls back, that the advisory lock serializes across
+processes, or that a lost `COMMIT` resolves as described. It is a
+harness over a stub, not a database integration suite. Negative
+controls run deliberately split and malformed designs through the same
+assertions and require them to fail.
+
+**Still outstanding after this change.** `FILES` is hardcoded;
+`verify_schema` is a total count with no `table_schema` filter and
+covers only 8 columns and 8 policies; `001_initial_schema.sql` is not
+idempotent on its own; `DATABASE_URL` is visible in `psql` argv; there
+is no CI and no dependency lock; and `psql` itself is not version-gated
+at startup (the script requires 10+, enforced only by its use of
+`\if`). See `IMPLEMENTATION_AUDIT.md` §TASK 0.3.
 
 ## 8. Health/readiness
 
