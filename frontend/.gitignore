@@ -1,0 +1,11 @@
+# Local secrets and real env values — never commit.
+.env
+.env.*
+!.env.example
+
+# Dependencies and build output
+node_modules/
+dist/
+
+# Vercel local project metadata and link state
+.vercel/
